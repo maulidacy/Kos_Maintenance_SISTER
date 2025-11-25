@@ -3,11 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/roleGuard';
 import { updateReportSchema } from '@/lib/validation';
 
-interface Params {
-  params: { id: string };
-}
-
-export async function PUT(req: NextRequest, { params }: Params) {
+export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     await requireAdmin();
     const body = await req.json();
@@ -20,6 +16,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     }
 
     const { status } = parsed.data;
+    const params = await context.params;
 
     const updated = await prisma.laporanFasilitas.update({
       where: { id: params.id },
