@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
-import { cookies } from 'next/headers';
+import type { NextRequest } from 'next/server';
+import { prisma } from './prisma';
 
 const JWT_SECRET = process.env.JWT_SECRET!;
 
@@ -33,18 +34,16 @@ export function verifyJwt(token: string): JwtPayload | null {
   }
 }
 
-// getCurrentUser boleh pakai prisma dengan dynamic import,
-// tapi ini tidak dipakai di /api/auth/register /login,
-// jadi aman dari error saat register/login
-export async function getCurrentUser() {
-  const cookieStore = cookies();
-  const token = cookieStore.get('token')?.value;
+/**
+ * Ambil user dari JWT cookie "token" yang ada di NextRequest.
+ */
+export async function getCurrentUser(req: NextRequest) {
+  // Ambil cookie "token" dari request
+  const token = req.cookies.get('token')?.value;
   if (!token) return null;
 
   const payload = verifyJwt(token);
   if (!payload) return null;
-
-  const { prisma } = await import('./prisma');
 
   const user = await prisma.user.findUnique({
     where: { id: payload.userId },

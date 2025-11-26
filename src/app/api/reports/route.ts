@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma, prismaReplica } from '@/lib/prisma';
 import { requireAuth, requireAdmin } from '@/lib/roleGuard';
+import { createReportSchema } from '@/lib/validation';
 
+export const runtime = 'nodejs';
+
+// GET: list laporan (mode strong/eventual/weak)
 export async function GET(req: NextRequest) {
   try {
     const mode = (req.nextUrl.searchParams.get('mode') || 'strong') as
@@ -13,16 +17,15 @@ export async function GET(req: NextRequest) {
     const kategori = req.nextUrl.searchParams.get('kategori') || undefined;
     const isAdminList = req.nextUrl.searchParams.get('admin') === '1';
 
-    const user = await (isAdminList ? requireAdmin() : requireAuth());
+    // DI SINI: kirim req ke guard
+    const user = await (isAdminList ? requireAdmin(req) : requireAuth(req));
 
-    // pilih client DB berdasarkan mode
     const client = mode === 'strong' ? prisma : prismaReplica;
 
     const where: any = {};
     if (status) where.status = status;
     if (kategori) where.kategori = kategori;
     if (!isAdminList) {
-      // user biasa hanya boleh lihat laporan miliknya
       where.userId = user.id;
     }
 
@@ -50,31 +53,30 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ reports, mode }, { status: 200 });
   } catch (error: any) {
-    if (error.message === 'UNAUTHENTICATED') {
+    if (error?.message === 'UNAUTHENTICATED') {
       return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
     }
-    if (error.message === 'FORBIDDEN') {
+    if (error?.message === 'FORBIDDEN') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
-    console.error(error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('Reports GET error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
+
+// Penghuni buat laporan – SELALU ke primary (Supabase)
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireAuth();
+    const user = await requireAuth(req); // baca user dari cookie token
     const body = await req.json();
-    const { createReportSchema } = await import('@/lib/validation');
 
     const parsed = createReportSchema.safeParse(body);
+
     if (!parsed.success) {
       return NextResponse.json(
-        { error: 'Invalid input', details: parsed.error.flatten() },
-        { status: 400 }
+        { error: 'Input tidak valid', details: parsed.error.flatten() },
+        { status: 400 },
       );
     }
 
@@ -94,14 +96,14 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ report }, { status: 201 });
-  } catch (error: any) {
-    if (error.message === 'UNAUTHENTICATED') {
+  } catch (err: any) {
+    console.error('Reports POST error:', err);
+    if (err.message === 'UNAUTHENTICATED') {
       return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
     }
-    console.error(error);
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
