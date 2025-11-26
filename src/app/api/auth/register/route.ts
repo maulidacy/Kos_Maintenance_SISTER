@@ -1,15 +1,22 @@
-export const runtime = 'nodejs';
-
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { registerSchema } from '@/lib/validation';
 import { hashPassword } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
+
+export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const parsed = registerSchema.safeParse(body);
+    const body = await req.json().catch(() => null);
 
+    if (!body) {
+      return NextResponse.json(
+        { error: 'Body tidak valid' },
+        { status: 400 },
+      );
+    }
+
+    const parsed = registerSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
         { error: 'Input tidak valid', details: parsed.error.flatten() },
@@ -19,18 +26,21 @@ export async function POST(req: NextRequest) {
 
     const { namaLengkap, email, password, nomorKamar } = parsed.data;
 
-    // cek apakah email sudah dipakai
-    const existing = await prisma.user.findUnique({ where: { email } });
+    // cek email
+    const existing = await prisma.user.findUnique({
+      where: { email },
+    });
+
     if (existing) {
       return NextResponse.json(
-        { error: 'Email sudah digunakan' },
+        { error: 'Email sudah terdaftar' },
         { status: 409 },
       );
     }
 
     const passwordHash = await hashPassword(password);
 
-    await prisma.user.create({
+    const user = await prisma.user.create({
       data: {
         namaLengkap,
         email,
@@ -38,16 +48,28 @@ export async function POST(req: NextRequest) {
         nomorKamar: nomorKamar || null,
         role: 'USER',
       },
+      select: {
+        id: true,
+        namaLengkap: true,
+        email: true,
+        role: true,
+      },
     });
 
     return NextResponse.json(
-      { message: 'Registrasi berhasil' },
+      {
+        message: 'Registrasi berhasil',
+        user,
+      },
       { status: 201 },
     );
-  } catch (error) {
-    console.error('Register API error:', error);
+  } catch (err: any) {
+    console.error('Register API error (prisma):', err);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      {
+        error: 'Internal server error',
+        detail: err?.message || 'unknown',
+      },
       { status: 500 },
     );
   }

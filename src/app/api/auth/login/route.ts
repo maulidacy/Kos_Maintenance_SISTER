@@ -1,15 +1,22 @@
-export const runtime = 'nodejs';
-
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { loginSchema } from '@/lib/validation';
+import { prisma } from '@/lib/prisma';
 import { signJwt, verifyPassword } from '@/lib/auth';
+
+export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const parsed = loginSchema.safeParse(body);
+    const body = await req.json().catch(() => null);
 
+    if (!body) {
+      return NextResponse.json(
+        { error: 'Body tidak valid' },
+        { status: 400 },
+      );
+    }
+
+    const parsed = loginSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
         { error: 'Input tidak valid', details: parsed.error.flatten() },
@@ -19,7 +26,10 @@ export async function POST(req: NextRequest) {
 
     const { email, password } = parsed.data;
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+
     if (!user) {
       return NextResponse.json(
         { error: 'Email atau password salah' },
@@ -43,6 +53,7 @@ export async function POST(req: NextRequest) {
 
     const res = NextResponse.json(
       {
+        message: 'Login berhasil',
         user: {
           id: user.id,
           namaLengkap: user.namaLengkap,
@@ -62,10 +73,13 @@ export async function POST(req: NextRequest) {
     });
 
     return res;
-  } catch (error) {
-    console.error('Login API error:', error);
+  } catch (err: any) {
+    console.error('Login API error (prisma):', err);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      {
+        error: 'Internal server error',
+        detail: err?.message || 'unknown',
+      },
       { status: 500 },
     );
   }

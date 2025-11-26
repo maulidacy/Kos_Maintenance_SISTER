@@ -5,18 +5,21 @@ const globalForPrisma = globalThis as unknown as {
   prismaReplica?: PrismaClient;
 };
 
-// Primary DB (Supabase) – pakai DATABASE_URL dari env / prisma.config
+// Primary: Supabase (DATABASE_URL)
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient();
 
-// Replica DB (Neon) – override pakai REPLICA_DATABASE_URL
+// Replica: Neon (REPLICA_DATABASE_URL)
+// Kalau REPLICA_DATABASE_URL belum di-set, fallback ke DATABASE_URL
 export const prismaReplica =
   globalForPrisma.prismaReplica ??
   new PrismaClient({
     datasources: {
       db: {
-        url: process.env.REPLICA_DATABASE_URL || process.env.DATABASE_URL!,
+        url:
+          process.env.REPLICA_DATABASE_URL ||
+          process.env.DATABASE_URL!, // fallback agar tidak crash
       },
     },
   });

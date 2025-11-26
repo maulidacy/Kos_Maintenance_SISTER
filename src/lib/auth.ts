@@ -1,12 +1,8 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import { cookies } from 'next/headers';
-import { prisma } from './prisma';
 
 const JWT_SECRET = process.env.JWT_SECRET!;
-if (!JWT_SECRET) {
-  throw new Error('JWT_SECRET is not set in environment variables');
-}
 
 export interface JwtPayload {
   userId: string;
@@ -37,6 +33,9 @@ export function verifyJwt(token: string): JwtPayload | null {
   }
 }
 
+// getCurrentUser boleh pakai prisma dengan dynamic import,
+// tapi ini tidak dipakai di /api/auth/register /login,
+// jadi aman dari error saat register/login
 export async function getCurrentUser() {
   const cookieStore = cookies();
   const token = cookieStore.get('token')?.value;
@@ -44,6 +43,8 @@ export async function getCurrentUser() {
 
   const payload = verifyJwt(token);
   if (!payload) return null;
+
+  const { prisma } = await import('./prisma');
 
   const user = await prisma.user.findUnique({
     where: { id: payload.userId },
