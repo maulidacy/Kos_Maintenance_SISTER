@@ -1,6 +1,7 @@
+// src/app/admin/timetime/page.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 function diffMinutes(a?: string | null, b?: string | null) {
   if (!a || !b) return null;
@@ -8,20 +9,111 @@ function diffMinutes(a?: string | null, b?: string | null) {
   return Math.max(0, Math.round(ms / 60000));
 }
 
+function toDateInputValue(d: Date) {
+  const year = d.getUTCFullYear();
+  const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+type Summary = {
+  range: { from: string; to: string };
+  total: number;
+  finished: number;
+  rejected: number;
+  received: number;
+  inProgress: number;
+  avgResponseMs: number;
+  avgWorkMs: number;
+  avgTotalMs: number;
+};
+
+type Human = {
+  avgResponseMin: number;
+  avgWorkMin: number;
+  avgTotalMin: number;
+};
+
 export default function AdminTimetimePage() {
   const [reports, setReports] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [human, setHuman] = useState<Human | null>(null);
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      const res = await fetch('/api/admin/timetime');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // ✅ default filter: 7 hari terakhir
+  const defaultRange = useMemo(() => {
+    const now = new Date();
+    const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 6));
+    return {
+      from: toDateInputValue(from),
+      to: toDateInputValue(to),
+    };
+  }, []);
+
+  const [from, setFrom] = useState(defaultRange.from);
+  const [to, setTo] = useState(defaultRange.to);
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const qs = new URLSearchParams();
+      if (from) qs.set('from', from);
+      if (to) qs.set('to', to);
+
+      const res = await fetch(`/api/admin/timetime?${qs.toString()}`, {
+        credentials: 'include',
+      });
+
       const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Gagal memuat timetime.');
+        setReports([]);
+        setSummary(null);
+        setHuman(null);
+        return;
+      }
+
       setReports(data.reports || []);
+      setSummary(data.summary || null);
+      setHuman(data.human || null);
+    } catch (e) {
+      console.error(e);
+      setError('Terjadi kesalahan jaringan.');
+      setReports([]);
+      setSummary(null);
+      setHuman(null);
+    } finally {
       setLoading(false);
     }
+  }
+
+  useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [from, to]);
+
+  // quick filter
+  function setRange(days: number) {
+    const now = new Date();
+    const toD = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const fromD = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - (days - 1)));
+    setFrom(toDateInputValue(fromD));
+    setTo(toDateInputValue(toD));
+  }
+
+  function setThisMonth() {
+    const now = new Date();
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
+    setFrom(toDateInputValue(start));
+    setTo(toDateInputValue(end));
+  }
 
   return (
     <section className="space-y-4">
@@ -29,12 +121,108 @@ export default function AdminTimetimePage() {
         <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300">
           Report Timetime
         </p>
-        <h1 className="text-xl font-semibold text-slate-50">Durasi Respon & Perbaikan</h1>
+        <h1 className="text-xl font-semibold text-slate-50">
+          Durasi Respon & Perbaikan
+        </h1>
         <p className="text-xs text-slate-400">
           Menghitung waktu berdasarkan timestamp: created → received → started → resolved
         </p>
       </header>
 
+      {/* FILTER BAR */}
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-3 text-xs">
+        <div className="flex items-center gap-2">
+          <label className="text-slate-300">From</label>
+          <input
+            type="date"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+            className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-xs text-slate-100 outline-none"
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label className="text-slate-300">To</label>
+          <input
+            type="date"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-xs text-slate-100 outline-none"
+          />
+        </div>
+
+        <div className="ml-auto flex flex-wrap gap-2">
+          <button
+            onClick={() => setRange(7)}
+            className="rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-800"
+          >
+            7 Hari
+          </button>
+          <button
+            onClick={() => setRange(30)}
+            className="rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-800"
+          >
+            30 Hari
+          </button>
+          <button
+            onClick={setThisMonth}
+            className="rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-800"
+          >
+            Bulan Ini
+          </button>
+
+          <button
+            onClick={load}
+            className="rounded-xl bg-emerald-500 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-emerald-400"
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {/* ERROR */}
+      {error && (
+        <p className="rounded-xl border border-red-500/40 bg-red-950/40 px-3 py-2 text-xs text-red-200">
+          {error}
+        </p>
+      )}
+
+      {/* SUMMARY */}
+      {!loading && summary && human && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+          <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+            <p className="text-[10px] uppercase tracking-wide text-slate-400">Total</p>
+            <p className="mt-2 text-2xl font-bold text-slate-50">{summary.total}</p>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+            <p className="text-[10px] uppercase tracking-wide text-slate-400">Selesai</p>
+            <p className="mt-2 text-2xl font-bold text-emerald-300">{summary.finished}</p>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+            <p className="text-[10px] uppercase tracking-wide text-slate-400">Ditolak</p>
+            <p className="mt-2 text-2xl font-bold text-red-300">{summary.rejected}</p>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+            <p className="text-[10px] uppercase tracking-wide text-slate-400">Avg Response</p>
+            <p className="mt-2 text-2xl font-bold text-slate-50">{human.avgResponseMin}m</p>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+            <p className="text-[10px] uppercase tracking-wide text-slate-400">Avg Repair</p>
+            <p className="mt-2 text-2xl font-bold text-slate-50">{human.avgWorkMin}m</p>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+            <p className="text-[10px] uppercase tracking-wide text-slate-400">Avg Total</p>
+            <p className="mt-2 text-2xl font-bold text-slate-50">{human.avgTotalMin}m</p>
+          </div>
+        </div>
+      )}
+
+      {/* TABLE */}
       {loading ? (
         <p className="text-xs text-slate-400">Memuat data...</p>
       ) : (
@@ -65,6 +253,7 @@ export default function AdminTimetimePage() {
                   </tr>
                 );
               })}
+
               {reports.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-4 py-6 text-center text-slate-400">

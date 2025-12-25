@@ -1,3 +1,4 @@
+// src/app/admin/reports/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -75,46 +76,76 @@ export default function AdminReportsPage() {
     checkRole();
   }, [router]);
 
-  async function load() {
+  async function load(opts?: { silent?: boolean }) {
+  const silent = opts?.silent ?? false;
+
+  if (!silent) {
     setLoading(true);
     setError(null);
+  }
 
-    try {
-      const res = await fetch(
-        `/api/reports?admin=1&mode=strong&page=${page}&limit=${LIMIT}`,
-        { credentials: 'include' }
-      );
-      const data = await res.json();
+  try {
+    const res = await fetch(
+      `/api/reports?admin=1&mode=strong&page=${page}&limit=${LIMIT}`,
+      { credentials: 'include' }
+    );
+    const data = await res.json();
 
-      if (!res.ok) {
+    if (!res.ok) {
+      if (!silent) {
         setError(data.error || 'Gagal memuat laporan.');
         setReports([]);
         setPagination(null);
-        return;
       }
+      return;
+    }
 
-      setReports(data.reports || []);
-      setPagination(data.pagination || null);
+    setReports(data.reports || []);
+    setPagination(data.pagination || null);
 
+    if (!silent) {
       const resTek = await fetch('/api/admin/teknisi', {
         credentials: 'include',
       });
       const dataTek = await resTek.json();
       setTeknisi(dataTek.teknisi || []);
-    } catch (e) {
-      console.error(e);
+    }
+  } catch (e) {
+    console.error(e);
+    if (!silent) {
       setError('Gagal memuat data laporan / teknisi.');
       setReports([]);
       setPagination(null);
-    } finally {
-      setLoading(false);
     }
+  } finally {
+    if (!silent) setLoading(false);
   }
+}
 
+  // load hanya kalau user admin
   useEffect(() => {
     if (!isAdmin) return;
     load();
   }, [isAdmin, page]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    let intervalId: any = null;
+
+    const startTimer = setTimeout(() => {
+      intervalId = setInterval(() => {
+        if (document.hidden) return;
+        if (busyId) return;
+        load();
+      }, 8000);
+    }, 3000);
+
+    return () => {
+      clearTimeout(startTimer);
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [isAdmin, busyId, page]);
 
   async function handleReceive(id: string) {
     setBusyId(id);

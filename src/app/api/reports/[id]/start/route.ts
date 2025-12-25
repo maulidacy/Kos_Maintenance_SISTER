@@ -13,16 +13,12 @@ export async function POST(
     const { id: reportId } = await context.params;
 
     if (!reportId) {
-      return NextResponse.json(
-        { error: 'Report ID tidak ditemukan.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Report ID tidak ditemukan.' }, { status: 400 });
     }
 
     const now = new Date();
 
     const updated = await prisma.$transaction(async (tx) => {
-      // Strong consistency: update hanya jika status masih DIPROSES dan teknisi assigned
       const result = await tx.laporanFasilitas.updateMany({
         where: { id: reportId, status: 'DIPROSES', assignedToId: teknisi.id },
         data: {
@@ -65,10 +61,7 @@ export async function POST(
         return NextResponse.json({ error: 'Laporan tidak ditemukan.' }, { status: 404 });
       }
       if (updated.error === 'FORBIDDEN') {
-        return NextResponse.json(
-          { error: 'Laporan ini bukan tugas kamu.' },
-          { status: 403 }
-        );
+        return NextResponse.json({ error: 'Laporan ini bukan tugas kamu.' }, { status: 403 });
       }
       return NextResponse.json(
         { error: 'Start hanya bisa saat status DIPROSES.' },

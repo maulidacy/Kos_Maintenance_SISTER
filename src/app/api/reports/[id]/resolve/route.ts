@@ -19,7 +19,6 @@ export async function POST(
     const now = new Date();
 
     const updated = await prisma.$transaction(async (tx) => {
-      // Strong consistency: resolve hanya jika status DIKERJAKAN dan teknisi assigned
       const result = await tx.laporanFasilitas.updateMany({
         where: { id: reportId, status: 'DIKERJAKAN', assignedToId: teknisi.id },
         data: {
@@ -62,10 +61,7 @@ export async function POST(
         return NextResponse.json({ error: 'Laporan tidak ditemukan.' }, { status: 404 });
       }
       if (updated.error === 'FORBIDDEN') {
-        return NextResponse.json(
-          { error: 'Laporan ini bukan tugas kamu.' },
-          { status: 403 }
-        );
+        return NextResponse.json({ error: 'Laporan ini bukan tugas kamu.' }, { status: 403 });
       }
       return NextResponse.json(
         { error: 'Resolve hanya bisa dilakukan saat status DIKERJAKAN.' },

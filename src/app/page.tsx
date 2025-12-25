@@ -19,7 +19,7 @@ export default function HomePage() {
     },
     {
       title: 'Mode Konsistensi',
-      desc: 'Strong (Supabase), eventual & weak consistency (Neon) untuk laporan & statistik.',
+      desc: 'Strong, eventual, & weak consistency untuk laporan & statistik.',
     },
   ];
 
@@ -41,7 +41,7 @@ export default function HomePage() {
           }`}
         >
           <p className="text-xs font-semibold tracking-wide text-indigo-300 uppercase">
-            Sistem Pelaporan Fasilitas Kos
+            Pelaporan Fasilitas Kos
           </p>
 
           <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-300 to-sky-300 bg-clip-text text-transparent drop-shadow">
@@ -66,13 +66,13 @@ export default function HomePage() {
             href="/login"
             className="rounded-xl bg-indigo-600 px-6 py-3 font-semibold text-white shadow-xl shadow-indigo-500/30 hover:bg-indigo-700 active:scale-[0.98] transition-all"
           >
-            Masuk Penghuni / Admin
+            Masuk
           </Link>
           <Link
             href="/register"
             className="rounded-xl border border-indigo-300/30 bg-white/10 backdrop-blur px-6 py-3 font-semibold text-indigo-200 shadow-lg hover:bg-white/20 active:scale-[0.98] transition-all"
           >
-            Daftar Penghuni Baru
+            Daftar
           </Link>
         </div>
 

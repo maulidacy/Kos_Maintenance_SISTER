@@ -27,23 +27,17 @@ export function ReportTable({ reports }: { reports: ReportRow[] }) {
             <th className="px-4 py-3">Dibuat</th>
           </tr>
         </thead>
+
         <tbody>
           {reports.length === 0 ? (
             <tr>
-              <td
-                colSpan={6}
-                className="px-4 py-6 text-center text-slate-400"
-              >
+              <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
                 Belum ada laporan.
               </td>
             </tr>
           ) : (
             reports.map((r) => (
-              <tr
-                key={r.id}
-                className="border-t border-white/5 hover:bg-slate-900/60"
-              >
-                {/* JUDUL → link ke detail laporan (halaman yang sudah berfungsi) */}
+              <tr key={r.id} className="border-t border-white/5 hover:bg-slate-900/60">
                 <td className="px-4 py-3 text-sm text-slate-100">
                   <Link
                     href={`/reports/${r.id}`}
@@ -52,18 +46,12 @@ export function ReportTable({ reports }: { reports: ReportRow[] }) {
                     {r.judul}
                   </Link>
                 </td>
-                <td className="px-4 py-3 text-xs text-slate-300">
-                  {r.kategori}
-                </td>
-                <td className="px-4 py-3 text-xs text-slate-300">
-                  {r.prioritas}
-                </td>
-                <td className="px-4 py-3 text-xs text-slate-300">
-                  {r.status}
-                </td>
-                <td className="px-4 py-3 text-xs text-slate-300">
-                  {r.lokasi}
-                </td>
+
+                <td className="px-4 py-3 text-xs text-slate-300">{r.kategori}</td>
+                <td className="px-4 py-3 text-xs text-slate-300">{r.prioritas}</td>
+                <td className="px-4 py-3 text-xs text-slate-300">{r.status}</td>
+                <td className="px-4 py-3 text-xs text-slate-300">{r.lokasi}</td>
+
                 <td className="px-4 py-3 text-xs text-slate-400">
                   {new Date(r.createdAt).toLocaleString('id-ID')}
                 </td>

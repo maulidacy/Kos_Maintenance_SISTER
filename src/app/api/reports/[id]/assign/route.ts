@@ -16,30 +16,26 @@ export async function POST(
     const teknisiId = body?.teknisiId as string | undefined;
 
     if (!reportId) {
-      return NextResponse.json(
-        { error: 'Report ID tidak ditemukan.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Report ID tidak ditemukan.' }, { status: 400 });
     }
 
     if (!teknisiId) {
       return NextResponse.json({ error: 'teknisiId wajib diisi.' }, { status: 400 });
     }
 
-    // cek teknisi valid
-    const teknisi = await prisma.user.findUnique({
-      where: { id: teknisiId },
-      select: { id: true, role: true },
-    });
-
-    if (!teknisi || teknisi.role !== 'TEKNISI') {
-      return NextResponse.json({ error: 'Teknisi tidak valid.' }, { status: 400 });
-    }
-
     const now = new Date();
 
     const updated = await prisma.$transaction(async (tx) => {
-      // Strong consistency: hanya update jika status masih DIPROSES
+      // validasi teknisi di dalam transaksi agar konsisten
+      const teknisi = await tx.user.findUnique({
+        where: { id: teknisiId },
+        select: { id: true, role: true },
+      });
+
+      if (!teknisi || teknisi.role !== 'TEKNISI') {
+        return { error: 'INVALID_TEKNISI' as const };
+      }
+
       const result = await tx.laporanFasilitas.updateMany({
         where: { id: reportId, status: 'DIPROSES' },
         data: { assignedToId: teknisiId },
@@ -74,6 +70,9 @@ export async function POST(
     });
 
     if ('error' in updated) {
+      if (updated.error === 'INVALID_TEKNISI') {
+        return NextResponse.json({ error: 'Teknisi tidak valid.' }, { status: 400 });
+      }
       if (updated.error === 'NOT_FOUND') {
         return NextResponse.json({ error: 'Laporan tidak ditemukan.' }, { status: 404 });
       }

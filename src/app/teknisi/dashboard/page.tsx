@@ -41,50 +41,84 @@ export default function TeknisiDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
 
-  async function load() {
-    setLoading(true);
-    setError(null);
+  async function load(opts?: { silent?: boolean }) {
+    const silent = opts?.silent ?? false;
+
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
 
     try {
-      // ambil tugas aktif
       const resAktif = await fetch('/api/teknisi/tasks', {
         credentials: 'include',
       });
       const dataAktif = await resAktif.json();
 
       if (!resAktif.ok) {
-        setError(dataAktif.error || 'Gagal memuat tugas teknisi.');
-        setTasks([]);
-        setTotalAktif(0);
-        setTotalSelesai(0);
+        if (!silent) {
+          setError(dataAktif.error || 'Gagal memuat tugas teknisi.');
+          setTasks([]);
+          setTotalAktif(0);
+          setTotalSelesai(0);
+          setLoading(false);
+        }
         return;
       }
 
-      // ambil tugas selesai
       const resSelesai = await fetch('/api/teknisi/tasks?tab=SELESAI', {
         credentials: 'include',
       });
       const dataSelesai = await resSelesai.json();
 
+      if (!resSelesai.ok) {
+        if (!silent) {
+          setError(dataSelesai.error || 'Gagal memuat tugas selesai.');
+        }
+        return;
+      }
+
       setTasks(dataAktif.tasks || []);
       setTotalAktif((dataAktif.tasks || []).length);
       setTotalSelesai((dataSelesai.tasks || []).length);
+      setLastUpdatedAt(new Date());
 
     } catch (e) {
       console.error(e);
-      setError('Gagal memuat tugas teknisi.');
-      setTasks([]);
-      setTotalAktif(0);
-      setTotalSelesai(0);
+      if (!silent) {
+        setError('Gagal memuat tugas teknisi.');
+        setTasks([]);
+        setTotalAktif(0);
+        setTotalSelesai(0);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
   useEffect(() => {
     load();
   }, []);
+
+  // eventual consistency: polling ringan
+  useEffect(() => {
+    let intervalId: any = null;
+
+    const startTimer = setTimeout(() => {
+      intervalId = setInterval(() => {
+        if (document.hidden) return;
+        if (busyId) return;
+        load({ silent: true });
+      }, 5000);
+    }, 3000);
+
+    return () => {
+      clearTimeout(startTimer);
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [busyId]);
 
   async function handleStart(id: string) {
     setBusyId(id);
@@ -162,8 +196,18 @@ export default function TeknisiDashboardPage() {
             </p>
             <h1 className="text-lg font-semibold">Dashboard Teknisi</h1>
             <p className="text-xs text-slate-300">
-              Lihat laporan yang sudah di-assign untuk kamu.
+              Lihat laporan yang sudah di-assign untuk dikerjakan.
             </p>
+
+            {lastUpdatedAt && (
+              <p className="mt-1 text-[10px] text-slate-500">
+                Terakhir update: {lastUpdatedAt.toLocaleTimeString('id-ID', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                })}
+              </p>
+            )}
           </div>
 
           <div className="flex items-center gap-2">

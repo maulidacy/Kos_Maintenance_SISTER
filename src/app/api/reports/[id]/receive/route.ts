@@ -22,7 +22,6 @@ export async function POST(
     const now = new Date();
 
     const updated = await prisma.$transaction(async (tx) => {
-      // Strong consistency: hanya update jika status masih BARU
       const result = await tx.laporanFasilitas.updateMany({
         where: { id: reportId, status: 'BARU' },
         data: {
@@ -37,10 +36,7 @@ export async function POST(
           select: { id: true, status: true },
         });
 
-        if (!existing) {
-          return { error: 'NOT_FOUND' as const };
-        }
-
+        if (!existing) return { error: 'NOT_FOUND' as const };
         return { error: 'INVALID_STATUS' as const };
       }
 
@@ -64,10 +60,7 @@ export async function POST(
 
     if ('error' in updated) {
       if (updated.error === 'NOT_FOUND') {
-        return NextResponse.json(
-          { error: 'Laporan tidak ditemukan.' },
-          { status: 404 }
-        );
+        return NextResponse.json({ error: 'Laporan tidak ditemukan.' }, { status: 404 });
       }
       return NextResponse.json(
         { error: 'Laporan sudah diproses, tidak bisa di-receive lagi.' },
@@ -75,10 +68,7 @@ export async function POST(
       );
     }
 
-    return NextResponse.json(
-      { ok: true, report: updated.report },
-      { status: 200 }
-    );
+    return NextResponse.json({ ok: true, report: updated.report }, { status: 200 });
   } catch (err: any) {
     console.error('Receive report error:', err);
 
