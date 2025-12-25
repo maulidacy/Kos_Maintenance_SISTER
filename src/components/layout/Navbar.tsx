@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 
 type NavbarProps = {
   appName?: string;
-  role?: 'USER' | 'ADMIN' | null;
+  role?: 'USER' | 'ADMIN' | 'TEKNISI' | null;
   showSidebarToggle?: boolean;
   onToggleSidebar?: () => void;
 };
@@ -18,6 +18,12 @@ export function Navbar({
 }: NavbarProps) {
   const pathname = usePathname();
   const isAdmin = pathname.startsWith('/admin');
+
+  // ✅ LOGOUT FUNCTION harus sebelum return
+  async function handleLogout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login';
+  }
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/70 backdrop-blur">
@@ -56,6 +62,14 @@ export function Navbar({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* ✅ LOGOUT BUTTON */}
+          <button
+            onClick={handleLogout}
+            className="rounded-xl border border-white/10 bg-slate-900/70 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-200 hover:bg-slate-800"
+          >
+            Logout
+          </button>
+
           {isAdmin && (
             <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-100">
               Admin Panel
@@ -64,7 +78,11 @@ export function Navbar({
 
           {role && (
             <span className="hidden rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-emerald-100 md:inline-flex">
-              {role === 'ADMIN' ? 'Admin' : 'Penghuni'}
+              {role === 'ADMIN'
+                ? 'Admin'
+                : role === 'TEKNISI'
+                ? 'Teknisi'
+                : 'Penghuni'}
             </span>
           )}
         </div>

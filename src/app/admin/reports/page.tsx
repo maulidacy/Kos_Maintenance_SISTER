@@ -1,86 +1,284 @@
+// src/app/admin/reports/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { ReportTable } from '@/components/reports/ReportTable';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
-type Mode = 'strong' | 'eventual' | 'weak';
+type ReportRow = {
+  id: string;
+  judul: string;
+  kategori: string;
+  prioritas: string;
+  status: string;
+  lokasi: string;
+  createdAt: string;
+  assignedToId?: string | null;
+};
+
+
+type Technician = {
+  id: string;
+  namaLengkap: string;
+  email: string;
+};
 
 export default function AdminReportsPage() {
-  const searchParams = useSearchParams();
   const router = useRouter();
 
-  const initialMode = (searchParams.get('mode') as Mode) || 'strong';
-  const [mode, setMode] = useState<Mode>(initialMode);
-  const [reports, setReports] = useState<any[]>([]);
+  const [reports, setReports] = useState<ReportRow[]>([]);
+  const [teknisi, setTeknisi] = useState<Technician[]>([]);
   const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
+  const [checkingRole, setCheckingRole] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // cek role terlebih dulu
   useEffect(() => {
-    async function fetchReports() {
-      setLoading(true);
-      const res = await fetch(`/api/reports?admin=1&mode=${mode}`);
+    async function checkRole() {
+      try {
+        const res = await fetch('/api/auth/me');
+        const data = await res.json();
+
+        if (!data.user) {
+          router.push('/login');
+          return;
+        }
+
+        if (data.user.role !== 'ADMIN') {
+          router.push('/reports');
+          return;
+        }
+
+        setIsAdmin(true);
+      } catch (e) {
+        console.error(e);
+        router.push('/login');
+      } finally {
+        setCheckingRole(false);
+      }
+    }
+
+    checkRole();
+  }, [router]);
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch('/api/reports?admin=1&mode=strong');
       const data = await res.json();
       setReports(data.reports || []);
+
+      const resTek = await fetch('/api/admin/teknisi');
+      const dataTek = await resTek.json();
+      setTeknisi(dataTek.teknisi || []);
+    } catch (e) {
+      console.error(e);
+      setError('Gagal memuat data laporan / teknisi.');
+    } finally {
       setLoading(false);
     }
-    fetchReports();
-  }, [mode]);
+  }
 
-  function handleModeChange(newMode: Mode) {
-    setMode(newMode);
-    const sp = new URLSearchParams(window.location.search);
-    sp.set('mode', newMode);
-    router.replace(`/admin/reports?${sp.toString()}`);
+  // load hanya kalau user admin
+  useEffect(() => {
+    if (!isAdmin) return;
+    load();
+  }, [isAdmin]);
+
+  async function handleReceive(id: string) {
+    setBusyId(id);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/reports/${id}/receive`, {
+        method: 'POST',
+        credentials: 'include', // ✅
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Gagal menerima laporan.');
+        return;
+      }
+
+      await load();
+    } catch (e) {
+      console.error(e);
+      setError('Terjadi kesalahan jaringan.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleAssign(reportId: string, teknisiId: string) {
+    if (!teknisiId) return;
+
+    setBusyId(reportId);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/reports/${reportId}/assign`, {
+        method: 'POST',
+        credentials: 'include', //
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teknisiId }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Gagal assign teknisi.');
+        return;
+      }
+
+      await load();
+    } catch (e) {
+      console.error(e);
+      setError('Terjadi kesalahan jaringan.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  // loading screen saat cek role
+  if (checkingRole) {
+    return (
+      <main className="min-h-screen bg-slate-950 text-slate-50 px-3 py-6">
+        <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top,#6366f1_0,#020617_55%,#000_100%)] opacity-70" />
+        <div className="relative z-10 mx-auto flex max-w-6xl flex-col gap-4">
+          <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-4 text-xs text-slate-300">
+            Mengecek akses admin...
+          </div>
+        </div>
+      </main>
+    );
   }
 
   return (
-    <div className="space-y-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-slate-50">
-            Daftar Laporan
-          </h1>
-          <p className="text-xs text-slate-400">
-            Mode konsistensi:{' '}
-            <span className="font-semibold uppercase">{mode}</span>
+    <main className="min-h-screen bg-slate-950 text-slate-50 px-3 py-6">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top,#6366f1_0,#020617_55%,#000_100%)] opacity-70" />
+
+      <div className="relative z-10 mx-auto flex max-w-6xl flex-col gap-4">
+        <header className="flex items-center justify-between gap-3">
+          <div>
+            <h1 className="text-lg font-semibold">Semua Laporan</h1>
+            <p className="text-xs text-slate-300">
+              Admin bisa menerima laporan & assign teknisi.
+            </p>
+          </div>
+
+          <Link
+            href="/admin/dashboard"
+            className="rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-medium text-slate-100 hover:bg-slate-800"
+          >
+            Kembali
+          </Link>
+        </header>
+
+        {error && (
+          <p className="rounded-xl border border-red-500/40 bg-red-950/40 px-3 py-2 text-xs text-red-200">
+            {error}
           </p>
-        </div>
+        )}
 
-        <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-900/70 px-2 py-1 text-xs text-slate-100">
-          <span className="hidden md:inline text-slate-400">
-            Mode baca data:
-          </span>
-          {(['strong', 'eventual', 'weak'] as Mode[]).map((m) => (
-            <button
-              key={m}
-              onClick={() => handleModeChange(m)}
-              className={`rounded-xl px-3 py-1 font-medium transition ${
-                mode === m
-                  ? 'bg-emerald-500 text-slate-950 shadow-sm shadow-emerald-500/40'
-                  : 'text-slate-300 hover:bg-slate-800'
-              }`}
-            >
-              {m}
-            </button>
-          ))}
-        </div>
-      </header>
+        {loading ? (
+          <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-4 text-xs text-slate-300">
+            Memuat laporan...
+          </div>
+        ) : (
+          <div className="rounded-3xl border border-white/10 bg-slate-950/80 shadow-[0_24px_80px_rgba(15,23,42,0.9)]">
+            <div className="overflow-x-auto overflow-y-visible">
+              <table className="min-w-full text-left text-xs text-slate-200">
+                <thead className="bg-slate-900/80 text-[11px] uppercase tracking-wide text-slate-400">
+                  <tr>
+                    <th className="px-4 py-3">Judul</th>
+                    <th className="px-4 py-3">Kategori</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Prioritas</th>
+                    <th className="px-4 py-3">Lokasi</th>
+                    <th className="px-4 py-3">Aksi</th>
+                  </tr>
+                </thead>
 
-      {loading ? (
-        <p className="text-xs text-slate-400">Memuat laporan...</p>
-      ) : (
-        <ReportTable
-          reports={reports.map((r) => ({
-            id: r.id,
-            judul: r.judul,
-            kategori: r.kategori,
-            prioritas: r.prioritas,
-            status: r.status,
-            lokasi: r.lokasi,
-            createdAt: r.createdAt,
-          }))}
-        />
-      )}
-    </div>
+                <tbody>
+                  {reports.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
+                        Belum ada laporan.
+                      </td>
+                    </tr>
+                  ) : (
+                    reports.map((r) => (
+                      <tr
+                        key={r.id}
+                        className="border-t border-white/5 hover:bg-slate-900/60"
+                      >
+                        <td className="px-4 py-3 text-sm text-slate-100">
+                          <Link
+                            href={`/reports/${r.id}`}
+                            className="hover:text-emerald-300 underline-offset-2 hover:underline"
+                          >
+                            {r.judul}
+                          </Link>
+                        </td>
+
+                        <td className="px-4 py-3 text-slate-300">{r.kategori}</td>
+                        <td className="px-4 py-3 text-slate-300">{r.status}</td>
+                        <td className="px-4 py-3 text-slate-300">{r.prioritas}</td>
+                        <td className="px-4 py-3 text-slate-300">{r.lokasi}</td>
+
+                        <td className="px-4 py-3 relative z-50">
+                          {r.status === 'BARU' && (
+                            <button
+                              onClick={() => handleReceive(r.id)}
+                              disabled={busyId === r.id}
+                              className="rounded-xl bg-emerald-500 px-3 py-1.5 text-[11px] font-semibold text-white shadow hover:bg-emerald-600 disabled:opacity-60"
+                            >
+                              {busyId === r.id ? 'Processing...' : 'Receive'}
+                            </button>
+                          )}
+
+                          {r.status === 'DIPROSES' && (
+                            <select
+                              disabled={busyId === r.id}
+                              className="w-full rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2 text-[11px] text-slate-200 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/30"
+                              value={r.assignedToId ?? ''}
+                              onChange={(e) => {
+                                const teknisiId = e.target.value;
+                                if (!teknisiId) return;
+                                handleAssign(r.id, teknisiId);
+                              }}
+                            >
+                              <option value="">Assign teknisi...</option>
+                              {teknisi.map((t) => (
+                                <option key={t.id} value={t.id}>
+                                  {t.namaLengkap}
+                                </option>
+                              ))}
+                            </select>
+
+                          )}
+
+                          {r.status !== 'BARU' && r.status !== 'DIPROSES' && (
+                            <span className="text-[11px] text-slate-500">
+                              Tidak ada aksi
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </main>
   );
 }

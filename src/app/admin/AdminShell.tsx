@@ -1,3 +1,4 @@
+// src/app/admin/AdminShell.tsx
 'use client';
 
 import { useState } from 'react';

@@ -1,3 +1,4 @@
+// src/app/admin/layout.tsx
 import type { ReactNode } from 'react';
 import AdminShell from './AdminShell';
 

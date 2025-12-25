@@ -1,3 +1,4 @@
+// src/components/layout/AdminSidebar.tsx
 'use client';
 
 import Link from 'next/link';
@@ -7,6 +8,7 @@ const links = [
   { href: '/admin/dashboard', label: 'Dashboard' },
   { href: '/admin/reports', label: 'Laporan' },
   { href: '/admin/stats', label: 'Statistik' },
+  { href: '/admin/timetime', label: 'Timetime' },
 ];
 
 type AdminSidebarProps = {

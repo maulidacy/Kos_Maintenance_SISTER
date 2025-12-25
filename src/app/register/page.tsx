@@ -1,3 +1,4 @@
+// src/app/register/page.tsx
 'use client';
 
 import { useState, FormEvent } from 'react';
@@ -7,6 +8,7 @@ import Link from 'next/link';
 type RegisterResponse = {
   message?: string;
   error?: string;
+  details?: any;
 };
 
 export default function RegisterPage() {
@@ -22,6 +24,12 @@ export default function RegisterPage() {
     e.preventDefault();
     setIsSubmitting(true);
     setError(null);
+
+    if (password.trim().length < 8) {
+      setIsSubmitting(false);
+      setError('Password minimal 8 karakter.');
+      return;
+    }
 
     try {
       const res = await fetch('/api/auth/register', {
@@ -45,7 +53,15 @@ export default function RegisterPage() {
       }
 
       if (!res.ok) {
-        setError(data?.error || 'Gagal mendaftar, coba lagi.');
+        const fieldErrors = data?.details?.fieldErrors;
+
+        // ambil pesan error pertama dari field manapun
+        const firstError =
+          fieldErrors && Object.keys(fieldErrors).length > 0
+            ? Object.values(fieldErrors)[0]?.[0]
+            : null;
+
+        setError(firstError || data?.error || 'Gagal mendaftar, coba lagi.');
         return;
       }
 

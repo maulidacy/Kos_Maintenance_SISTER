@@ -1,3 +1,4 @@
+-- prisma/migrations/20251125122319_init/migration.sql  
 -- CreateEnum
 CREATE TYPE "Role" AS ENUM ('USER', 'ADMIN');
 

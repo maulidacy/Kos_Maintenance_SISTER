@@ -1,3 +1,4 @@
+// src/app/api/auth/register/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { registerSchema } from '@/lib/validation';
 import { hashPassword } from '@/lib/auth';
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest) {
         namaLengkap,
         email,
         passwordHash,
-        nomorKamar: nomorKamar || null,
+        nomorKamar: nomorKamar ?? null,
         role: 'USER',
       },
       select: {

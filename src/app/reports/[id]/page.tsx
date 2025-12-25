@@ -15,6 +15,9 @@ type ReportDetail = {
   fotoUrl: string | null;
   createdAt: string;
   updatedAt: string;
+  receivedAt?: string | null;
+  startedAt?: string | null;
+  resolvedAt?: string | null;
   user?: {
     namaLengkap: string;
     nomorKamar: string | null;
@@ -37,10 +40,10 @@ export default function ReportDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [events, setEvents] = useState<any[]>([]);
 
   const [report, setReport] = useState<ReportDetail | null>(null);
 
-  // form state
   const [judul, setJudul] = useState('');
   const [kategori, setKategori] = useState('AIR');
   const [prioritas, setPrioritas] = useState<'RENDAH' | 'SEDANG' | 'TINGGI'>(
@@ -50,7 +53,6 @@ export default function ReportDetailPage() {
   const [deskripsi, setDeskripsi] = useState('');
   const [fotoUrl, setFotoUrl] = useState('');
 
-  // apakah boleh edit/hapus?
   const canEdit = report?.status === 'BARU';
 
   useEffect(() => {
@@ -59,6 +61,7 @@ export default function ReportDetailPage() {
     async function loadDetail() {
       setLoading(true);
       setError(null);
+
       try {
         const res = await fetch(`/api/reports/${reportId}`);
         const data: { report?: ReportDetail } & ApiError = await res.json();
@@ -76,7 +79,7 @@ export default function ReportDetailPage() {
         setDeskripsi(data.report.deskripsi);
         setFotoUrl(data.report.fotoUrl || '');
       } catch (err) {
-        console.error('Fetch detail error:', err);
+        console.error(err);
         setError('Terjadi kesalahan. Coba lagi nanti.');
       } finally {
         setLoading(false);
@@ -86,13 +89,28 @@ export default function ReportDetailPage() {
     loadDetail();
   }, [reportId]);
 
+  useEffect(() => {
+    if (!reportId) return;
+
+    async function loadEvents() {
+      try {
+        const res = await fetch(`/api/reports/${reportId}/events`);
+        const data = await res.json();
+        setEvents(data.events || []);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    loadEvents();
+  }, [reportId]);
+
   async function handleSave(e: FormEvent) {
     e.preventDefault();
     if (!report) return;
+
     if (!canEdit) {
-      setError(
-        'Laporan yang sudah diproses tidak bisa diedit. Hubungi admin jika ada koreksi.',
-      );
+      setError('Laporan sudah diproses, tidak bisa diedit.');
       return;
     }
 
@@ -117,7 +135,6 @@ export default function ReportDetailPage() {
       const data: { report?: ReportDetail } & ApiError = await res.json();
 
       if (!res.ok || !data.report) {
-        console.error('Update report detail:', data.details);
         setError(data.error || 'Gagal menyimpan perubahan.');
         return;
       }
@@ -125,7 +142,7 @@ export default function ReportDetailPage() {
       setReport(data.report);
       setSuccess('Perubahan berhasil disimpan.');
     } catch (err) {
-      console.error('PATCH error:', err);
+      console.error(err);
       setError('Terjadi kesalahan saat menyimpan.');
     } finally {
       setSaving(false);
@@ -134,44 +151,35 @@ export default function ReportDetailPage() {
 
   async function handleDelete() {
     if (!confirm('Yakin ingin menghapus laporan ini?')) return;
-
+    setDeleting(true);
     setError(null);
-    setSuccess(null);
 
     try {
       const res = await fetch(`/api/reports/${reportId}`, {
         method: 'DELETE',
       });
 
-      let data: { ok?: boolean; message?: string; error?: string } = {};
-      try {
-        data = await res.json();
-      } catch {
-        // jika berhasil tapi body kosong
-      }
+      const data = await res.json().catch(() => ({}));
 
-      if (!res.ok || data.error) {
-        setError(
-          data.error ||
-          'Gagal menghapus laporan. Pastikan status masih BARU atau Anda admin.',
-        );
+      if (!res.ok) {
+        setError(data.error || 'Gagal menghapus laporan.');
         return;
       }
 
-      router.push('/reports'); // redirect ke halaman daftar report
+      router.push('/reports');
     } catch (err) {
       console.error(err);
-      setError('Terjadi kesalahan jaringan saat menghapus laporan.');
+      setError('Terjadi kesalahan jaringan.');
+    } finally {
+      setDeleting(false);
     }
   }
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-50 px-3 py-6">
-      {/* Background radial gradient konsisten */}
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top,#6366f1_0,#020617_55%,#000_100%)] opacity-70" />
 
       <div className="relative z-10 mx-auto flex max-w-4xl flex-col gap-5">
-        {/* Header + back link */}
         <header className="flex items-center justify-between gap-3">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300/80">
@@ -186,8 +194,7 @@ export default function ReportDetailPage() {
                 <span className="font-semibold text-emerald-300">
                   {report.status}
                 </span>{' '}
-                • Dibuat:{' '}
-                {new Date(report.createdAt).toLocaleString('id-ID')}
+                • Dibuat: {new Date(report.createdAt).toLocaleString('id-ID')}
               </p>
             )}
           </div>
@@ -196,13 +203,12 @@ export default function ReportDetailPage() {
             href="/reports"
             className="inline-flex items-center rounded-xl border border-slate-700 bg-slate-900/70 px-3 py-1.5 text-xs font-medium text-slate-100 hover:bg-slate-800"
           >
-            Kembali ke daftar
+            Kembali
           </Link>
         </header>
 
-        {/* Kartu utama */}
         <section className="grid gap-4 rounded-3xl border border-white/10 bg-slate-950/80 p-5 shadow-[0_24px_80px_rgba(15,23,42,0.9)] backdrop-blur md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-          {/* Form edit */}
+          {/* FORM */}
           <form
             onSubmit={handleSave}
             className="space-y-4 border-b border-slate-800 pb-4 md:border-b-0 md:border-r md:pb-0 md:pr-4"
@@ -220,7 +226,7 @@ export default function ReportDetailPage() {
                     value={judul}
                     onChange={(e) => setJudul(e.target.value)}
                     disabled={!canEdit}
-                    className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-50 disabled:cursor-not-allowed disabled:bg-slate-900/40"
+                    className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-50 disabled:bg-slate-900/40"
                   />
                 </div>
 
@@ -233,7 +239,7 @@ export default function ReportDetailPage() {
                       value={kategori}
                       onChange={(e) => setKategori(e.target.value)}
                       disabled={!canEdit}
-                      className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-50 disabled:cursor-not-allowed disabled:bg-slate-900/40"
+                      className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-50 disabled:bg-slate-900/40"
                     >
                       <option value="AIR">Air</option>
                       <option value="LISTRIK">Listrik</option>
@@ -256,7 +262,7 @@ export default function ReportDetailPage() {
                         )
                       }
                       disabled={!canEdit}
-                      className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-50 disabled:cursor-not-allowed disabled:bg-slate-900/40"
+                      className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-50 disabled:bg-slate-900/40"
                     >
                       <option value="RENDAH">Rendah</option>
                       <option value="SEDANG">Sedang</option>
@@ -274,7 +280,7 @@ export default function ReportDetailPage() {
                     value={lokasi}
                     onChange={(e) => setLokasi(e.target.value)}
                     disabled={!canEdit}
-                    className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-50 disabled:cursor-not-allowed disabled:bg-slate-900/40"
+                    className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-50 disabled:bg-slate-900/40"
                   />
                 </div>
 
@@ -287,7 +293,7 @@ export default function ReportDetailPage() {
                     value={deskripsi}
                     onChange={(e) => setDeskripsi(e.target.value)}
                     disabled={!canEdit}
-                    className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-50 disabled:cursor-not-allowed disabled:bg-slate-900/40"
+                    className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-50 disabled:bg-slate-900/40"
                   />
                 </div>
 
@@ -300,12 +306,8 @@ export default function ReportDetailPage() {
                     value={fotoUrl}
                     onChange={(e) => setFotoUrl(e.target.value)}
                     disabled={!canEdit}
-                    className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-50 disabled:cursor-not-allowed disabled:bg-slate-900/40"
-                    placeholder="https://..."
+                    className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-50 disabled:bg-slate-900/40"
                   />
-                  <p className="mt-1 text-[10px] text-slate-400">
-                    Kosongkan jika tidak ada foto.
-                  </p>
                 </div>
 
                 {error && (
@@ -319,18 +321,11 @@ export default function ReportDetailPage() {
                   </p>
                 )}
 
-                {!canEdit && (
-                  <p className="text-[11px] text-amber-300/90">
-                    Laporan sudah diproses, sehingga tidak bisa diedit dari
-                    sisi penghuni. Hubungi admin jika ada koreksi.
-                  </p>
-                )}
-
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
                   <button
                     type="submit"
                     disabled={saving || !canEdit}
-                    className="inline-flex items-center rounded-xl bg-emerald-500 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-emerald-500/50"
+                    className="inline-flex items-center rounded-xl bg-emerald-500 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-emerald-500/30 hover:bg-emerald-600 disabled:bg-emerald-500/50"
                   >
                     {saving ? 'Menyimpan...' : 'Simpan perubahan'}
                   </button>
@@ -339,7 +334,7 @@ export default function ReportDetailPage() {
                     type="button"
                     onClick={handleDelete}
                     disabled={deleting}
-                    className="inline-flex items-center rounded-xl border border-red-500/60 bg-red-950/50 px-3 py-2 text-xs font-semibold text-red-100 hover:bg-red-900/70 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex items-center rounded-xl border border-red-500/60 bg-red-950/50 px-3 py-2 text-xs font-semibold text-red-100 hover:bg-red-900/70 disabled:opacity-60"
                   >
                     {deleting ? 'Menghapus...' : 'Hapus laporan'}
                   </button>
@@ -348,59 +343,116 @@ export default function ReportDetailPage() {
             )}
           </form>
 
-          {/* Panel info pelapor & status */}
+          {/* SIDE PANEL */}
           <div className="space-y-3">
+            {/* STATUS + TIMESTAMP */}
             <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-3 text-xs">
               <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
                 Info Status
               </p>
+
               {report ? (
-                <ul className="mt-2 space-y-1 text-slate-200">
-                  <li>
-                    <span className="text-slate-400">Status:</span>{' '}
-                    <span className="font-semibold text-emerald-300">
-                      {report.status}
-                    </span>
-                  </li>
-                  <li>
-                    <span className="text-slate-400">Dibuat:</span>{' '}
-                    {new Date(report.createdAt).toLocaleString('id-ID')}
-                  </li>
-                  <li>
-                    <span className="text-slate-400">Diupdate:</span>{' '}
-                    {new Date(report.updatedAt).toLocaleString('id-ID')}
-                  </li>
-                </ul>
+                <>
+                  <ul className="mt-2 space-y-1 text-slate-200">
+                    <li>
+                      <span className="text-slate-400">Status:</span>{' '}
+                      <span className="font-semibold text-emerald-300">
+                        {report.status}
+                      </span>
+                    </li>
+                    <li>
+                      <span className="text-slate-400">Dibuat:</span>{' '}
+                      {new Date(report.createdAt).toLocaleString('id-ID')}
+                    </li>
+                    <li>
+                      <span className="text-slate-400">Diupdate:</span>{' '}
+                      {new Date(report.updatedAt).toLocaleString('id-ID')}
+                    </li>
+                  </ul>
+
+                  <div className="mt-4 rounded-xl border border-white/5 bg-slate-950/40 px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                      Timestamp Proses
+                    </p>
+                    <ul className="mt-2 space-y-1 text-[11px] text-slate-200">
+                      <li>
+                        <span className="text-slate-400">Reported:</span>{' '}
+                        {new Date(report.createdAt).toLocaleString('id-ID')}
+                      </li>
+                      <li>
+                        <span className="text-slate-400">Received:</span>{' '}
+                        {report.receivedAt
+                          ? new Date(report.receivedAt).toLocaleString('id-ID')
+                          : '-'}
+                      </li>
+                      <li>
+                        <span className="text-slate-400">Started:</span>{' '}
+                        {report.startedAt
+                          ? new Date(report.startedAt).toLocaleString('id-ID')
+                          : '-'}
+                      </li>
+                      <li>
+                        <span className="text-slate-400">Resolved:</span>{' '}
+                        {report.resolvedAt
+                          ? new Date(report.resolvedAt).toLocaleString('id-ID')
+                          : '-'}
+                      </li>
+                    </ul>
+                  </div>
+                </>
               ) : (
-                <p className="mt-2 text-slate-300">
-                  Memuat informasi status...
-                </p>
+                <p className="mt-2 text-slate-300">Memuat informasi status...</p>
               )}
             </div>
 
+            {/* TIMELINE */}
+            <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-3 text-xs">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                Timeline
+              </p>
+
+              {events.length === 0 ? (
+                <p className="mt-2 text-slate-400">Belum ada event.</p>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  {events.map((ev) => (
+                    <div
+                      key={ev.id}
+                      className="rounded-xl border border-white/5 bg-slate-950/40 px-3 py-2"
+                    >
+                      <p className="text-[11px] font-semibold text-emerald-300">
+                        {ev.type}
+                      </p>
+                      <p className="text-[11px] text-slate-200">
+                        {ev.note || '-'}
+                      </p>
+                      <p className="text-[10px] text-slate-500">
+                        {new Date(ev.at).toLocaleString('id-ID')}
+                        {ev.actor?.namaLengkap ? ` • ${ev.actor.namaLengkap}` : ''}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* PELAPOR */}
             <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-3 text-xs">
               <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
                 Info Pelapor
               </p>
               {report ? (
                 <ul className="mt-2 space-y-1 text-slate-200">
-                  {/* Nama pelapor (kalau ada) */}
                   {report.user?.namaLengkap && <li>{report.user.namaLengkap}</li>}
-
-                  {/* LOKASI LAPORAN → ini yang harus SELALAS dengan form */}
                   {report.lokasi && (
                     <li className="text-slate-300">Lokasi: {report.lokasi}</li>
                   )}
-
-                  {/* Opsional: kamar terdaftar di profil, kalau berbeda dari lokasi laporan */}
                   {report.user?.nomorKamar &&
                     report.user.nomorKamar !== report.lokasi && (
                       <li className="text-slate-400 text-[11px]">
                         Kamar terdaftar: {report.user.nomorKamar}
                       </li>
                     )}
-
-                  {/* Email pelapor */}
                   {report.user?.email && (
                     <li className="text-slate-400 text-[11px]">
                       {report.user.email}
@@ -413,6 +465,8 @@ export default function ReportDetailPage() {
                 </p>
               )}
             </div>
+
+            {/* FOTO */}
             {report?.fotoUrl && (
               <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-3 text-xs">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">

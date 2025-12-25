@@ -17,3 +17,15 @@ export async function requireAdmin(req: NextRequest) {
   }
   return user;
 }
+
+export async function requireTeknisi(req: NextRequest) {
+  const user = await requireAuth(req);
+
+  console.log("ROLE CHECK:", user.email, user.role);
+
+  if (user.role !== 'TEKNISI') {
+    throw new Error('FORBIDDEN');
+  }
+  return user;
+}
+

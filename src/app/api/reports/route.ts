@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
       ? await requireAdmin(req)
       : await requireAuth(req);
 
-    // 🔁 pilih DB client berdasarkan mode
+    // pilih DB client berdasarkan mode
     const client =
       mode === 'strong'
         ? prisma
@@ -38,27 +38,28 @@ export async function GET(req: NextRequest) {
       where.userId = user.id;
     }
 
-    const reports = await client.laporanFasilitas.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
+   const reports = await client.laporanFasilitas.findMany({
+  where,
+  orderBy: { createdAt: 'desc' },
+  select: {
+    id: true,
+    kategori: true,
+    judul: true,
+    deskripsi: true,
+    fotoUrl: true,
+    prioritas: true,
+    status: true,
+    lokasi: true,
+    createdAt: true,
+    assignedToId: true,
+    user: {
       select: {
-        id: true,
-        kategori: true,
-        judul: true,
-        deskripsi: true,
-        fotoUrl: true,
-        prioritas: true,
-        status: true,
-        lokasi: true,
-        createdAt: true,
-        user: {
-          select: {
-            namaLengkap: true,
-            nomorKamar: true,
-          },
-        },
+        namaLengkap: true,
+        nomorKamar: true,
       },
-    });
+    },
+  },
+});
 
     return NextResponse.json({ reports, mode }, { status: 200 });
   } catch (error: any) {

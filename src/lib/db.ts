@@ -1,3 +1,4 @@
+// src/lib/db.ts
 import { Pool } from 'pg';
 
 // Simpan Pool di global supaya tidak dibuat berkali-kali di dev (HMR)

@@ -1,3 +1,4 @@
+// src/app/admin/stats/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';

@@ -48,7 +48,10 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    return NextResponse.json({ report }, { status: 200 });
+    return NextResponse.json(
+      { report, viewerRole: user.role },
+      { status: 200 },
+    );
   } catch (error: any) {
     if (error?.message === 'UNAUTHENTICATED') {
       return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
@@ -93,61 +96,24 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
     }
 
     // =============== ADMIN ===============
+    // Admin HANYA boleh mengubah status, bukan isi laporan
     if (user.role === 'ADMIN') {
-      const updateData: any = {};
+      const parsedStatus = updateReportStatusSchema.safeParse({
+        status: body.status,
+      });
 
-      // status
-      if (Object.prototype.hasOwnProperty.call(body, 'status')) {
-        const parsedStatus = updateReportStatusSchema.safeParse({
-          status: body.status,
-        });
-        if (!parsedStatus.success) {
-          const flat = parsedStatus.error.flatten();
-          console.error('Update report status validation error (ADMIN):', flat);
-          return NextResponse.json(
-            { error: 'Invalid status', details: flat },
-            { status: 400 },
-          );
-        }
-        updateData.status = parsedStatus.data.status;
-      }
-
-      // field lain (judul, deskripsi, dll)
-      const { status, ...restFields } = body;
-      const parsedUserUpdate = updateReportUserSchema.partial().safeParse(
-        restFields,
-      );
-
-      if (!parsedUserUpdate.success) {
-        const flat = parsedUserUpdate.error.flatten();
-        console.error('Update report fields validation error (ADMIN):', flat);
+      if (!parsedStatus.success) {
+        const flat = parsedStatus.error.flatten();
+        console.error('Update report status validation error (ADMIN):', flat);
         return NextResponse.json(
-          { error: 'Invalid input', details: flat },
-          { status: 400 },
-        );
-      }
-
-      Object.assign(updateData, parsedUserUpdate.data);
-
-      if (Object.keys(updateData).length === 0) {
-        return NextResponse.json(
-          { error: 'Tidak ada field yang diupdate' },
+          { error: 'Status tidak valid', details: flat },
           { status: 400 },
         );
       }
 
       const updated = await prisma.laporanFasilitas.update({
         where: { id },
-        data: updateData,
-        include: {
-          user: {
-            select: {
-              namaLengkap: true,
-              nomorKamar: true,
-              email: true,
-            },
-          },
-        },
+        data: { status: parsedStatus.data.status },
       });
 
       return NextResponse.json({ report: updated }, { status: 200 });

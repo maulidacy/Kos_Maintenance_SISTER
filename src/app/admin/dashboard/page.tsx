@@ -1,3 +1,4 @@
+// src/app/admin/dashboard/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -82,6 +83,7 @@ export default function AdminDashboardPage() {
             (strong consistency / Supabase).
           </p>
         </div>
+
       </header>
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">

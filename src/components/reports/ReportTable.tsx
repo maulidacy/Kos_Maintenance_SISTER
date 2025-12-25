@@ -1,6 +1,7 @@
+// src/components/reports/ReportTable.tsx
 'use client';
 
-import React from 'react';
+import Link from 'next/link';
 
 type ReportRow = {
   id: string;
@@ -12,63 +13,59 @@ type ReportRow = {
   createdAt: string;
 };
 
-type ReportTableProps = {
-  reports: ReportRow[];
-  onRowClick?: (id: string) => void;
-};
-
-export function ReportTable({ reports, onRowClick }: ReportTableProps) {
+export function ReportTable({ reports }: { reports: ReportRow[] }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-white/10 bg-slate-950/70 shadow-lg shadow-slate-950/70">
-      <table className="min-w-full divide-y divide-slate-800 text-sm">
-        <thead className="bg-slate-900/80">
+    <div className="mt-3 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-[0_24px_80px_rgba(15,23,42,0.9)]">
+      <table className="min-w-full text-left text-xs text-slate-200">
+        <thead className="bg-slate-900/80 text-[11px] uppercase tracking-wide text-slate-400">
           <tr>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Judul
-            </th>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Kategori
-            </th>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Prioritas
-            </th>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Status
-            </th>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Lokasi
-            </th>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Dibuat
-            </th>
+            <th className="px-4 py-3">Judul</th>
+            <th className="px-4 py-3">Kategori</th>
+            <th className="px-4 py-3">Prioritas</th>
+            <th className="px-4 py-3">Status</th>
+            <th className="px-4 py-3">Lokasi</th>
+            <th className="px-4 py-3">Dibuat</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-800 bg-slate-950/80">
+        <tbody>
           {reports.length === 0 ? (
             <tr>
               <td
                 colSpan={6}
-                className="px-4 py-6 text-center text-xs text-slate-400"
+                className="px-4 py-6 text-center text-slate-400"
               >
                 Belum ada laporan.
               </td>
             </tr>
           ) : (
-            reports.map((report) => (
+            reports.map((r) => (
               <tr
-                key={report.id}
-                className="cursor-pointer hover:bg-slate-900/80"
-                onClick={() => onRowClick?.(report.id)}
+                key={r.id}
+                className="border-t border-white/5 hover:bg-slate-900/60"
               >
-                <td className="px-4 py-3 text-slate-50">{report.judul}</td>
-                <td className="px-4 py-3 text-slate-300">{report.kategori}</td>
-                <td className="px-4 py-3 text-slate-300">
-                  {report.prioritas}
+                {/* JUDUL → link ke detail laporan (halaman yang sudah berfungsi) */}
+                <td className="px-4 py-3 text-sm text-slate-100">
+                  <Link
+                    href={`/reports/${r.id}`}
+                    className="hover:text-emerald-300 underline-offset-2 hover:underline"
+                  >
+                    {r.judul}
+                  </Link>
                 </td>
-                <td className="px-4 py-3 text-slate-300">{report.status}</td>
-                <td className="px-4 py-3 text-slate-300">{report.lokasi}</td>
-                <td className="px-4 py-3 text-slate-400 text-xs">
-                  {new Date(report.createdAt).toLocaleString()}
+                <td className="px-4 py-3 text-xs text-slate-300">
+                  {r.kategori}
+                </td>
+                <td className="px-4 py-3 text-xs text-slate-300">
+                  {r.prioritas}
+                </td>
+                <td className="px-4 py-3 text-xs text-slate-300">
+                  {r.status}
+                </td>
+                <td className="px-4 py-3 text-xs text-slate-300">
+                  {r.lokasi}
+                </td>
+                <td className="px-4 py-3 text-xs text-slate-400">
+                  {new Date(r.createdAt).toLocaleString('id-ID')}
                 </td>
               </tr>
             ))

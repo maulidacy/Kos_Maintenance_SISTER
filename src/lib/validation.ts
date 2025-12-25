@@ -1,13 +1,31 @@
+// src/lib/validation.ts
 import { z } from 'zod';
 
 // ==================================================
 // REGISTER
 // ==================================================
 export const registerSchema = z.object({
-  namaLengkap: z.string().trim().min(3).max(100),
-  email: z.string().email(),
-  password: z.string().min(8).max(100),
-  nomorKamar: z.string().trim().max(20).optional().or(z.literal('')),
+  namaLengkap: z
+    .string()
+    .trim()
+    .min(3, 'Nama lengkap minimal 3 karakter')
+    .max(100, 'Nama terlalu panjang (maksimal 100 karakter)'),
+
+  email: z
+    .string()
+    .email('Format email tidak valid'),
+
+  password: z
+    .string()
+    .min(8, 'Password minimal 8 karakter')
+    .max(100, 'Password terlalu panjang (maksimal 100 karakter)'),
+
+  nomorKamar: z
+    .string()
+    .trim()
+    .max(20, 'Nomor kamar maksimal 20 karakter')
+    .optional()
+    .or(z.literal('')),
 });
 
 // ==================================================

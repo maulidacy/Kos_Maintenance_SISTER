@@ -56,3 +56,8 @@ body {
   filter: saturate(1.15);
 }
 
+select option {
+  background: #0f172a; /* slate-900 */
+  color: #e2e8f0;       /* slate-200 */
+}
+

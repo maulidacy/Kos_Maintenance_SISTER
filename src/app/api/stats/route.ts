@@ -1,3 +1,4 @@
+// src/app/api/stats/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma, prismaReplica } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/roleGuard';
@@ -6,7 +7,7 @@ export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAdmin();
+    await requireAdmin(req);
 
     const mode = (req.nextUrl.searchParams.get('mode') || 'weak') as
       | 'strong'

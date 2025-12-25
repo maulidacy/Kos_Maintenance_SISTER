@@ -1,3 +1,4 @@
+// src/app/login/page.tsx
 'use client';
 
 import { useState, FormEvent } from 'react';
@@ -9,7 +10,7 @@ type LoginResponse = {
         id: string;
         namaLengkap: string;
         email: string;
-        role: 'USER' | 'ADMIN';
+        role: 'USER' | 'ADMIN' | 'TEKNISI';
     };
     error?: string;
 };
@@ -49,9 +50,12 @@ export default function LoginPage() {
 
             if (data?.user?.role === 'ADMIN') {
                 router.push('/admin/dashboard');
+            } else if (data?.user?.role === 'TEKNISI') {
+                router.push('/teknisi/dashboard');
             } else {
                 router.push('/reports');
             }
+
         } catch (err) {
             console.error('Login error:', err);
             setError('Terjadi kesalahan jaringan. Coba lagi nanti.');
