@@ -91,6 +91,17 @@ export const updateReportStatusSchema = z.object({
 export const updateReportUserSchema = z.object({
   judul: z.string().trim().min(3).max(200).optional(),
 
+  kategori: z
+    .enum([
+      'AIR',
+      'LISTRIK',
+      'WIFI',
+      'KEBERSIHAN',
+      'FASILITAS_UMUM',
+      'LAINNYA',
+    ])
+    .optional(),
+
   deskripsi: z
     .string()
     .trim()

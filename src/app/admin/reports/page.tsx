@@ -145,6 +145,37 @@ export default function AdminReportsPage() {
     }
   }
 
+  // reject
+  async function handleReject(id: string) {
+    const reason = prompt('Alasan penolakan (opsional):') || '';
+
+    setBusyId(id);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/reports/${id}/reject`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: reason }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Gagal menolak laporan.');
+        return;
+      }
+
+      await load();
+    } catch (e) {
+      console.error(e);
+      setError('Terjadi kesalahan jaringan.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   // loading screen saat cek role
   if (checkingRole) {
     return (
@@ -234,34 +265,53 @@ export default function AdminReportsPage() {
 
                         <td className="px-4 py-3 relative z-50">
                           {r.status === 'BARU' && (
-                            <button
-                              onClick={() => handleReceive(r.id)}
-                              disabled={busyId === r.id}
-                              className="rounded-xl bg-emerald-500 px-3 py-1.5 text-[11px] font-semibold text-white shadow hover:bg-emerald-600 disabled:opacity-60"
-                            >
-                              {busyId === r.id ? 'Processing...' : 'Receive'}
-                            </button>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                onClick={() => handleReceive(r.id)}
+                                disabled={busyId === r.id}
+                                className="rounded-xl bg-emerald-500 px-3 py-1.5 text-[11px] font-semibold text-white shadow hover:bg-emerald-600 disabled:opacity-60"
+                              >
+                                {busyId === r.id ? 'Processing...' : 'Receive'}
+                              </button>
+
+                              <button
+                                onClick={() => handleReject(r.id)}
+                                disabled={busyId === r.id}
+                                className="rounded-xl bg-red-600 px-3 py-1.5 text-[11px] font-semibold text-white shadow hover:bg-red-700 disabled:opacity-60"
+                              >
+                                {busyId === r.id ? '...' : 'Reject'}
+                              </button>
+                            </div>
                           )}
 
                           {r.status === 'DIPROSES' && (
-                            <select
-                              disabled={busyId === r.id}
-                              className="w-full rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2 text-[11px] text-slate-200 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/30"
-                              value={r.assignedToId ?? ''}
-                              onChange={(e) => {
-                                const teknisiId = e.target.value;
-                                if (!teknisiId) return;
-                                handleAssign(r.id, teknisiId);
-                              }}
-                            >
-                              <option value="">Assign teknisi...</option>
-                              {teknisi.map((t) => (
-                                <option key={t.id} value={t.id}>
-                                  {t.namaLengkap}
-                                </option>
-                              ))}
-                            </select>
+                            <div className="flex flex-col gap-2">
+                              <select
+                                disabled={busyId === r.id}
+                                className="w-full rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2 text-[11px] text-slate-200 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/30"
+                                value={r.teknisiId ?? ''}
+                                onChange={(e) => {
+                                  const teknisiId = e.target.value;
+                                  if (!teknisiId) return;
+                                  handleAssign(r.id, teknisiId);
+                                }}
+                              >
+                                <option value="">Assign teknisi...</option>
+                                {teknisi.map((t) => (
+                                  <option key={t.id} value={t.id}>
+                                    {t.namaLengkap}
+                                  </option>
+                                ))}
+                              </select>
 
+                              <button
+                                onClick={() => handleReject(r.id)}
+                                disabled={busyId === r.id}
+                                className="rounded-xl bg-red-600 px-3 py-1.5 text-[11px] font-semibold text-white shadow hover:bg-red-700 disabled:opacity-60"
+                              >
+                                {busyId === r.id ? '...' : 'Reject'}
+                              </button>
+                            </div>
                           )}
 
                           {r.status !== 'BARU' && r.status !== 'DIPROSES' && (

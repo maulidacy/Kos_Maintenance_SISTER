@@ -1,3 +1,4 @@
+// src/app/reports/[id]/page.tsx
 'use client';
 
 import { useEffect, useState, FormEvent } from 'react';
@@ -30,6 +31,13 @@ type ApiError = {
   details?: unknown;
 };
 
+type MeUser = {
+  id: string;
+  email: string;
+  role: 'USER' | 'ADMIN' | 'TEKNISI';
+  namaLengkap: string;
+};
+
 export default function ReportDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -40,21 +48,43 @@ export default function ReportDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [events, setEvents] = useState<any[]>([]);
 
+  const [events, setEvents] = useState<any[]>([]);
+  const [me, setMe] = useState<MeUser | null>(null);
   const [report, setReport] = useState<ReportDetail | null>(null);
 
   const [judul, setJudul] = useState('');
   const [kategori, setKategori] = useState('AIR');
   const [prioritas, setPrioritas] = useState<'RENDAH' | 'SEDANG' | 'TINGGI'>(
-    'SEDANG',
+    'SEDANG'
   );
   const [lokasi, setLokasi] = useState('');
   const [deskripsi, setDeskripsi] = useState('');
   const [fotoUrl, setFotoUrl] = useState('');
 
-  const canEdit = report?.status === 'BARU';
+  const isUser = me?.role === 'USER';
+  const isTeknisi = me?.role === 'TEKNISI';
+  const isAdmin = me?.role === 'ADMIN';
 
+  const canEdit = isUser && report?.status === 'BARU';
+  const canDelete = isUser && report?.status === 'BARU';
+
+  // load user login
+  useEffect(() => {
+    async function loadMe() {
+      try {
+        const res = await fetch('/api/auth/me', { credentials: 'include' });
+        const data = await res.json();
+        setMe(data.user || null);
+      } catch (e) {
+        console.error(e);
+        setMe(null);
+      }
+    }
+    loadMe();
+  }, []);
+
+  // load report detail
   useEffect(() => {
     if (!reportId) return;
 
@@ -63,7 +93,10 @@ export default function ReportDetailPage() {
       setError(null);
 
       try {
-        const res = await fetch(`/api/reports/${reportId}`);
+        const res = await fetch(`/api/reports/${reportId}`, {
+          credentials: 'include',
+        });
+
         const data: { report?: ReportDetail } & ApiError = await res.json();
 
         if (!res.ok || !data.report) {
@@ -89,12 +122,15 @@ export default function ReportDetailPage() {
     loadDetail();
   }, [reportId]);
 
+  // load events
   useEffect(() => {
     if (!reportId) return;
 
     async function loadEvents() {
       try {
-        const res = await fetch(`/api/reports/${reportId}/events`);
+        const res = await fetch(`/api/reports/${reportId}/events`, {
+          credentials: 'include',
+        });
         const data = await res.json();
         setEvents(data.events || []);
       } catch (e) {
@@ -105,6 +141,7 @@ export default function ReportDetailPage() {
     loadEvents();
   }, [reportId]);
 
+  // USER save report (only status BARU)
   async function handleSave(e: FormEvent) {
     e.preventDefault();
     if (!report) return;
@@ -121,6 +158,7 @@ export default function ReportDetailPage() {
     try {
       const res = await fetch(`/api/reports/${report.id}`, {
         method: 'PATCH',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           judul,
@@ -149,14 +187,17 @@ export default function ReportDetailPage() {
     }
   }
 
+  // USER delete report (only status BARU)
   async function handleDelete() {
     if (!confirm('Yakin ingin menghapus laporan ini?')) return;
+
     setDeleting(true);
     setError(null);
 
     try {
       const res = await fetch(`/api/reports/${reportId}`, {
         method: 'DELETE',
+        credentials: 'include',
       });
 
       const data = await res.json().catch(() => ({}));
@@ -175,6 +216,66 @@ export default function ReportDetailPage() {
     }
   }
 
+  // TEKNISI start
+  async function handleStart() {
+    if (!report) return;
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const res = await fetch(`/api/reports/${report.id}/start`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Gagal memulai laporan.');
+        return;
+      }
+
+      setSuccess('Laporan berhasil dimulai.');
+      window.location.reload();
+    } catch (err) {
+      console.error(err);
+      setError('Terjadi kesalahan saat start.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // TEKNISI resolve
+  async function handleResolve() {
+    if (!report) return;
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const res = await fetch(`/api/reports/${report.id}/resolve`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Gagal menyelesaikan laporan.');
+        return;
+      }
+
+      setSuccess('Laporan berhasil diselesaikan.');
+      window.location.reload();
+    } catch (err) {
+      console.error(err);
+      setError('Terjadi kesalahan saat resolve.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-50 px-3 py-6">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top,#6366f1_0,#020617_55%,#000_100%)] opacity-70" />
@@ -188,15 +289,6 @@ export default function ReportDetailPage() {
             <h1 className="mt-1 text-lg font-semibold">
               {report ? report.judul : 'Memuat...'}
             </h1>
-            {report && (
-              <p className="text-xs text-slate-300">
-                Status:{' '}
-                <span className="font-semibold text-emerald-300">
-                  {report.status}
-                </span>{' '}
-                • Dibuat: {new Date(report.createdAt).toLocaleString('id-ID')}
-              </p>
-            )}
           </div>
 
           <Link
@@ -217,6 +309,7 @@ export default function ReportDetailPage() {
               <p className="text-xs text-slate-300">Memuat detail laporan...</p>
             ) : (
               <>
+                {/* input fields */}
                 <div>
                   <label className="block text-xs font-medium text-slate-200">
                     Judul laporan
@@ -257,9 +350,7 @@ export default function ReportDetailPage() {
                     <select
                       value={prioritas}
                       onChange={(e) =>
-                        setPrioritas(
-                          e.target.value as 'RENDAH' | 'SEDANG' | 'TINGGI',
-                        )
+                        setPrioritas(e.target.value as any)
                       }
                       disabled={!canEdit}
                       className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-50 disabled:bg-slate-900/40"
@@ -310,6 +401,7 @@ export default function ReportDetailPage() {
                   />
                 </div>
 
+                {/* messages */}
                 {error && (
                   <p className="rounded-xl border border-red-500/50 bg-red-950/40 px-3 py-2 text-xs text-red-200">
                     {error}
@@ -321,23 +413,61 @@ export default function ReportDetailPage() {
                   </p>
                 )}
 
+                {/* ROLE BASED ACTION BUTTONS */}
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-                  <button
-                    type="submit"
-                    disabled={saving || !canEdit}
-                    className="inline-flex items-center rounded-xl bg-emerald-500 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-emerald-500/30 hover:bg-emerald-600 disabled:bg-emerald-500/50"
-                  >
-                    {saving ? 'Menyimpan...' : 'Simpan perubahan'}
-                  </button>
+                  {/* USER */}
+                  {isUser && (
+                    <>
+                      <button
+                        type="submit"
+                        disabled={saving || !canEdit}
+                        className="inline-flex items-center rounded-xl bg-emerald-500 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-emerald-500/30 hover:bg-emerald-600 disabled:bg-emerald-500/50"
+                      >
+                        {saving ? 'Menyimpan...' : 'Simpan perubahan'}
+                      </button>
 
-                  <button
-                    type="button"
-                    onClick={handleDelete}
-                    disabled={deleting}
-                    className="inline-flex items-center rounded-xl border border-red-500/60 bg-red-950/50 px-3 py-2 text-xs font-semibold text-red-100 hover:bg-red-900/70 disabled:opacity-60"
-                  >
-                    {deleting ? 'Menghapus...' : 'Hapus laporan'}
-                  </button>
+                      {canDelete && (
+                        <button
+                          type="button"
+                          onClick={handleDelete}
+                          disabled={deleting}
+                          className="inline-flex items-center rounded-xl border border-red-500/60 bg-red-950/50 px-3 py-2 text-xs font-semibold text-red-100 hover:bg-red-900/70 disabled:opacity-60"
+                        >
+                          {deleting ? 'Menghapus...' : 'Hapus laporan'}
+                        </button>
+                      )}
+                    </>
+                  )}
+
+                  {/* TEKNISI */}
+                  {isTeknisi && report?.status === 'DIPROSES' && (
+                    <button
+                      type="button"
+                      onClick={handleStart}
+                      disabled={saving}
+                      className="inline-flex items-center rounded-xl bg-emerald-500 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-emerald-500/30 hover:bg-emerald-600 disabled:bg-emerald-500/50"
+                    >
+                      {saving ? '...' : 'Start'}
+                    </button>
+                  )}
+
+                  {isTeknisi && report?.status === 'DIKERJAKAN' && (
+                    <button
+                      type="button"
+                      onClick={handleResolve}
+                      disabled={saving}
+                      className="inline-flex items-center rounded-xl bg-indigo-500 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-500/30 hover:bg-indigo-600 disabled:bg-indigo-500/50"
+                    >
+                      {saving ? '...' : 'Resolve'}
+                    </button>
+                  )}
+
+                  {/* ADMIN */}
+                  {isAdmin && (
+                    <p className="text-xs text-slate-400">
+                      Admin hanya dapat melihat detail laporan.
+                    </p>
+                  )}
                 </div>
               </>
             )}
@@ -345,67 +475,6 @@ export default function ReportDetailPage() {
 
           {/* SIDE PANEL */}
           <div className="space-y-3">
-            {/* STATUS + TIMESTAMP */}
-            <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-3 text-xs">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                Info Status
-              </p>
-
-              {report ? (
-                <>
-                  <ul className="mt-2 space-y-1 text-slate-200">
-                    <li>
-                      <span className="text-slate-400">Status:</span>{' '}
-                      <span className="font-semibold text-emerald-300">
-                        {report.status}
-                      </span>
-                    </li>
-                    <li>
-                      <span className="text-slate-400">Dibuat:</span>{' '}
-                      {new Date(report.createdAt).toLocaleString('id-ID')}
-                    </li>
-                    <li>
-                      <span className="text-slate-400">Diupdate:</span>{' '}
-                      {new Date(report.updatedAt).toLocaleString('id-ID')}
-                    </li>
-                  </ul>
-
-                  <div className="mt-4 rounded-xl border border-white/5 bg-slate-950/40 px-3 py-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                      Timestamp Proses
-                    </p>
-                    <ul className="mt-2 space-y-1 text-[11px] text-slate-200">
-                      <li>
-                        <span className="text-slate-400">Reported:</span>{' '}
-                        {new Date(report.createdAt).toLocaleString('id-ID')}
-                      </li>
-                      <li>
-                        <span className="text-slate-400">Received:</span>{' '}
-                        {report.receivedAt
-                          ? new Date(report.receivedAt).toLocaleString('id-ID')
-                          : '-'}
-                      </li>
-                      <li>
-                        <span className="text-slate-400">Started:</span>{' '}
-                        {report.startedAt
-                          ? new Date(report.startedAt).toLocaleString('id-ID')
-                          : '-'}
-                      </li>
-                      <li>
-                        <span className="text-slate-400">Resolved:</span>{' '}
-                        {report.resolvedAt
-                          ? new Date(report.resolvedAt).toLocaleString('id-ID')
-                          : '-'}
-                      </li>
-                    </ul>
-                  </div>
-                </>
-              ) : (
-                <p className="mt-2 text-slate-300">Memuat informasi status...</p>
-              )}
-            </div>
-
-            {/* TIMELINE */}
             <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-3 text-xs">
               <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
                 Timeline
@@ -428,60 +497,12 @@ export default function ReportDetailPage() {
                       </p>
                       <p className="text-[10px] text-slate-500">
                         {new Date(ev.at).toLocaleString('id-ID')}
-                        {ev.actor?.namaLengkap ? ` • ${ev.actor.namaLengkap}` : ''}
                       </p>
                     </div>
                   ))}
                 </div>
               )}
             </div>
-
-            {/* PELAPOR */}
-            <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-3 text-xs">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                Info Pelapor
-              </p>
-              {report ? (
-                <ul className="mt-2 space-y-1 text-slate-200">
-                  {report.user?.namaLengkap && <li>{report.user.namaLengkap}</li>}
-                  {report.lokasi && (
-                    <li className="text-slate-300">Lokasi: {report.lokasi}</li>
-                  )}
-                  {report.user?.nomorKamar &&
-                    report.user.nomorKamar !== report.lokasi && (
-                      <li className="text-slate-400 text-[11px]">
-                        Kamar terdaftar: {report.user.nomorKamar}
-                      </li>
-                    )}
-                  {report.user?.email && (
-                    <li className="text-slate-400 text-[11px]">
-                      {report.user.email}
-                    </li>
-                  )}
-                </ul>
-              ) : (
-                <p className="mt-2 text-slate-300">
-                  Informasi pelapor tidak tersedia.
-                </p>
-              )}
-            </div>
-
-            {/* FOTO */}
-            {report?.fotoUrl && (
-              <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-3 text-xs">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                  Foto Laporan
-                </p>
-                <a
-                  href={report.fotoUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-2 inline-flex text-[11px] text-emerald-300 underline hover:text-emerald-200"
-                >
-                  Buka foto di tab baru
-                </a>
-              </div>
-            )}
           </div>
         </section>
       </div>

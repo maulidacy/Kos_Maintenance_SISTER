@@ -1,6 +1,4 @@
 // src/app/api/reports/[id]/route.ts
-export const runtime = 'nodejs';
-
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/roleGuard';
@@ -9,23 +7,42 @@ import {
   updateReportUserSchema,
 } from '@/lib/validation';
 
-type RouteContext = {
-  params: Promise<{ id: string }>;
-};
+export const runtime = 'nodejs';
 
-// ✅ GET /api/reports/[id] – detail laporan
-export async function GET(req: NextRequest, ctx: RouteContext) {
+// ✅ GET detail report
+export async function GET(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
     const user = await requireAuth(req);
-    const { id } = await ctx.params; // ⬅️ penting: await params
+    const { id: reportId } = await context.params;
 
-    if (!id) {
-      return NextResponse.json({ error: 'ID tidak valid' }, { status: 400 });
+    if (!reportId) {
+      return NextResponse.json(
+        { error: 'Report ID tidak ditemukan.' },
+        { status: 400 }
+      );
     }
 
     const report = await prisma.laporanFasilitas.findUnique({
-      where: { id },
-      include: {
+      where: { id: reportId },
+      select: {
+        id: true,
+        judul: true,
+        kategori: true,
+        prioritas: true,
+        status: true,
+        lokasi: true,
+        deskripsi: true,
+        fotoUrl: true,
+        createdAt: true,
+        updatedAt: true,
+        receivedAt: true,
+        startedAt: true,
+        resolvedAt: true,
+        assignedToId: true,
+        userId: true,
         user: {
           select: {
             namaLengkap: true,
@@ -37,40 +54,39 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
     });
 
     if (!report) {
-      return NextResponse.json(
-        { error: 'Laporan tidak ditemukan' },
-        { status: 404 },
-      );
+      return NextResponse.json({ error: 'Laporan tidak ditemukan.' }, { status: 404 });
     }
 
-    // jika bukan admin, hanya boleh lihat laporan miliknya
-    if (user.role !== 'ADMIN' && report.userId !== user.id) {
+    // ✅ RULE AKSES:
+    const isAdmin = user.role === 'ADMIN';
+    const isOwner = report.userId === user.id;
+    const isAssignedTeknisi =
+      user.role === 'TEKNISI' && report.assignedToId === user.id;
+
+    if (!isAdmin && !isOwner && !isAssignedTeknisi) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    return NextResponse.json(
-      { report, viewerRole: user.role },
-      { status: 200 },
-    );
-  } catch (error: any) {
-    if (error?.message === 'UNAUTHENTICATED') {
-      return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    return NextResponse.json({ report }, { status: 200 });
+  } catch (err: any) {
+    console.error('GET /reports/[id] error:', err);
+
+    if (err?.message === 'UNAUTHENTICATED') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    console.error('Report detail GET error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 },
-    );
+
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
 
-// ✅ PUT /api/reports/[id]
-//  - ADMIN: boleh ubah status + isi
-//  - USER: hanya isi, hanya kalau status BARU
-export async function PUT(req: NextRequest, ctx: RouteContext) {
+// ✅ UPDATE (PUT & PATCH)
+export async function PUT(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
     const user = await requireAuth(req);
-    const { id } = await ctx.params; // ⬅️ penting
+    const { id } = await context.params;
 
     if (!id) {
       return NextResponse.json({ error: 'ID tidak valid' }, { status: 400 });
@@ -78,10 +94,7 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== 'object') {
-      return NextResponse.json(
-        { error: 'Body tidak valid' },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: 'Body tidak valid' }, { status: 400 });
     }
 
     const existing = await prisma.laporanFasilitas.findUnique({
@@ -89,112 +102,94 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
     });
 
     if (!existing) {
-      return NextResponse.json(
-        { error: 'Laporan tidak ditemukan' },
-        { status: 404 },
-      );
+      return NextResponse.json({ error: 'Laporan tidak ditemukan' }, { status: 404 });
     }
 
-    // =============== ADMIN ===============
-    // Admin HANYA boleh mengubah status, bukan isi laporan
-    if (user.role === 'ADMIN') {
-      const parsedStatus = updateReportStatusSchema.safeParse({
-        status: body.status,
-      });
+    // ❌ TEKNISI tidak boleh update report
+    if (user.role === 'TEKNISI') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
-      if (!parsedStatus.success) {
-        const flat = parsedStatus.error.flatten();
-        console.error('Update report status validation error (ADMIN):', flat);
+    // ✅ ADMIN: boleh update status saja
+    if (user.role === 'ADMIN') {
+      const parsed = updateReportStatusSchema.safeParse({ status: body.status });
+
+      if (!parsed.success) {
         return NextResponse.json(
-          { error: 'Status tidak valid', details: flat },
-          { status: 400 },
+          { error: 'Status tidak valid', details: parsed.error.flatten() },
+          { status: 400 }
         );
       }
 
       const updated = await prisma.laporanFasilitas.update({
         where: { id },
-        data: { status: parsedStatus.data.status },
+        data: { status: parsed.data.status },
       });
 
       return NextResponse.json({ report: updated }, { status: 200 });
     }
 
-    // =============== USER ===============
-    // hanya pemilik
+    // ✅ USER: hanya laporan miliknya
     if (existing.userId !== user.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // user tidak boleh kirim field status
+    // ✅ USER tidak boleh update status
     if (Object.prototype.hasOwnProperty.call(body, 'status')) {
       return NextResponse.json(
         { error: 'Pengguna tidak boleh mengubah status laporan.' },
-        { status: 403 },
+        { status: 403 }
       );
     }
 
-    // hanya bisa edit kalau status BARU
+    // ✅ USER hanya bisa edit kalau status BARU
     if (existing.status !== 'BARU') {
       return NextResponse.json(
         { error: 'Laporan sudah diproses, tidak bisa diubah lagi.' },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
-    const parsedUserUpdate = updateReportUserSchema.safeParse(body);
-    if (!parsedUserUpdate.success) {
-      const flat = parsedUserUpdate.error.flatten();
-      console.error('Update report user validation error (USER):', flat);
+    const parsed = updateReportUserSchema.safeParse(body);
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: 'Invalid input', details: flat },
-        { status: 400 },
-      );
-    }
-
-    if (Object.keys(parsedUserUpdate.data).length === 0) {
-      return NextResponse.json(
-        { error: 'Tidak ada field yang diupdate' },
-        { status: 400 },
+        { error: 'Invalid input', details: parsed.error.flatten() },
+        { status: 400 }
       );
     }
 
     const updated = await prisma.laporanFasilitas.update({
       where: { id },
-      data: parsedUserUpdate.data,
-      include: {
-        user: {
-          select: {
-            namaLengkap: true,
-            nomorKamar: true,
-            email: true,
-          },
-        },
-      },
+      data: parsed.data,
     });
 
     return NextResponse.json({ report: updated }, { status: 200 });
-  } catch (error: any) {
-    if (error?.message === 'UNAUTHENTICATED') {
-      return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+  } catch (err: any) {
+    console.error('PUT /reports/[id] error:', err);
+
+    if (err?.message === 'UNAUTHENTICATED') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    console.error('Report update PUT error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 },
-    );
+
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
 
-// ✅ PATCH → alias ke PUT
-export async function PATCH(req: NextRequest, ctx: RouteContext) {
-  return PUT(req, ctx);
+export async function PATCH(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  return PUT(req, context);
 }
 
-// ✅ DELETE /api/reports/[id] – hapus laporan
-export async function DELETE(req: NextRequest, ctx: RouteContext) {
+// ✅ DELETE report
+export async function DELETE(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
     const user = await requireAuth(req);
-    const { id } = await ctx.params; // ⬅️ ingat: params adalah Promise
+    const { id } = await context.params;
 
     if (!id) {
       return NextResponse.json({ error: 'ID tidak valid' }, { status: 400 });
@@ -205,48 +200,43 @@ export async function DELETE(req: NextRequest, ctx: RouteContext) {
     });
 
     if (!existing) {
-      return NextResponse.json(
-        { error: 'Laporan tidak ditemukan' },
-        { status: 404 },
-      );
+      return NextResponse.json({ error: 'Laporan tidak ditemukan' }, { status: 404 });
     }
 
-    // =============== ADMIN ===============
+    // ❌ TEKNISI tidak boleh delete report
+    if (user.role === 'TEKNISI') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // ✅ ADMIN boleh hapus semua
     if (user.role === 'ADMIN') {
       await prisma.laporanFasilitas.delete({ where: { id } });
-
-      return NextResponse.json(
-        { ok: true, message: 'Laporan berhasil dihapus.' },
-        { status: 200 },
-      );
+      return NextResponse.json({ ok: true }, { status: 200 });
     }
 
-    // =============== USER (penghuni) ===============
-    // hanya boleh hapus laporan sendiri
+    // USER hanya hapus laporan sendiri
     if (existing.userId !== user.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // hanya boleh hapus kalau status masih BARU
+    // USER hanya boleh hapus jika status masih BARU
     if (existing.status !== 'BARU') {
       return NextResponse.json(
         { error: 'Laporan sudah diproses, tidak bisa dihapus.' },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
     await prisma.laporanFasilitas.delete({ where: { id } });
 
     return NextResponse.json({ ok: true }, { status: 200 });
-  } catch (error: any) {
-    if (error?.message === 'UNAUTHENTICATED') {
-      return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+  } catch (err: any) {
+    console.error('DELETE /reports/[id] error:', err);
+
+    if (err?.message === 'UNAUTHENTICATED') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    console.error('Report DELETE error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 },
-    );
+
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
-

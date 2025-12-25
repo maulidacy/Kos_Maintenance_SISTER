@@ -1,3 +1,4 @@
+// src/app/teknisi/dashboard/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -34,6 +35,8 @@ function Badge({
 }
 
 export default function TeknisiDashboardPage() {
+  const [totalAktif, setTotalAktif] = useState(0);
+  const [totalSelesai, setTotalSelesai] = useState(0);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -44,22 +47,36 @@ export default function TeknisiDashboardPage() {
     setError(null);
 
     try {
-      const res = await fetch('/api/teknisi/tasks', {
-        credentials: 'include', // ✅ IMPORTANT
+      // ambil tugas aktif
+      const resAktif = await fetch('/api/teknisi/tasks', {
+        credentials: 'include',
       });
+      const dataAktif = await resAktif.json();
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || 'Gagal memuat tugas teknisi.');
+      if (!resAktif.ok) {
+        setError(dataAktif.error || 'Gagal memuat tugas teknisi.');
         setTasks([]);
+        setTotalAktif(0);
+        setTotalSelesai(0);
         return;
       }
 
-      setTasks(data.tasks || []);
+      // ambil tugas selesai
+      const resSelesai = await fetch('/api/teknisi/tasks?tab=SELESAI', {
+        credentials: 'include',
+      });
+      const dataSelesai = await resSelesai.json();
+
+      setTasks(dataAktif.tasks || []);
+      setTotalAktif((dataAktif.tasks || []).length);
+      setTotalSelesai((dataSelesai.tasks || []).length);
+
     } catch (e) {
       console.error(e);
       setError('Gagal memuat tugas teknisi.');
+      setTasks([]);
+      setTotalAktif(0);
+      setTotalSelesai(0);
     } finally {
       setLoading(false);
     }
@@ -76,7 +93,7 @@ export default function TeknisiDashboardPage() {
     try {
       const res = await fetch(`/api/reports/${id}/start`, {
         method: 'POST',
-        credentials: 'include', // ✅ FIX
+        credentials: 'include', // FIX
       });
 
       const data = await res.json();
@@ -102,7 +119,7 @@ export default function TeknisiDashboardPage() {
     try {
       const res = await fetch(`/api/reports/${id}/resolve`, {
         method: 'POST',
-        credentials: 'include', // ✅ FIX
+        credentials: 'include', // FIX
       });
 
       const data = await res.json();
@@ -165,6 +182,21 @@ export default function TeknisiDashboardPage() {
             </Link>
           </div>
         </header>
+
+        {/* TOTAL CARD */}
+        {!loading && (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+              <p className="text-[11px] text-slate-400">Tugas Aktif</p>
+              <p className="mt-1 text-2xl font-semibold text-white">{totalAktif}</p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+              <p className="text-[11px] text-slate-400">Tugas Selesai</p>
+              <p className="mt-1 text-2xl font-semibold text-white">{totalSelesai}</p>
+            </div>
+          </div>
+        )}
 
         {/* ERROR */}
         {error && (

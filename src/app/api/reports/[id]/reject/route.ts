@@ -1,7 +1,7 @@
-// src/app/api/reports/[id]/resolve/route.ts
+// src/app/api/reports/[id]/reject/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireTeknisi } from '@/lib/roleGuard';
+import { requireAdmin } from '@/lib/roleGuard';
 
 export const runtime = 'nodejs';
 
@@ -10,32 +10,42 @@ export async function POST(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const teknisi = await requireTeknisi(req);
+    const admin = await requireAdmin(req);
     const { id: reportId } = await context.params;
 
     if (!reportId) {
-      return NextResponse.json({ error: 'Report ID tidak ditemukan.' }, { status: 400 });
-    }
-
-    const report = await prisma.laporanFasilitas.findUnique({
-      where: { id: reportId },
-      select: { id: true, status: true, assignedToId: true },
-    });
-
-    if (!report) {
-      return NextResponse.json({ error: 'Laporan tidak ditemukan.' }, { status: 404 });
-    }
-
-    if (report.assignedToId !== teknisi.id) {
       return NextResponse.json(
-        { error: 'Laporan ini bukan tugas kamu.' },
-        { status: 403 }
+        { error: 'Report ID tidak ditemukan.' },
+        { status: 400 }
       );
     }
 
-    if (report.status !== 'DIKERJAKAN') {
+    const body = await req.json().catch(() => null);
+    const note = body?.note as string | undefined;
+
+    const report = await prisma.laporanFasilitas.findUnique({
+      where: { id: reportId },
+      select: { id: true, status: true },
+    });
+
+    if (!report) {
       return NextResponse.json(
-        { error: 'Resolve hanya bisa dilakukan saat status DIKERJAKAN.' },
+        { error: 'Laporan tidak ditemukan.' },
+        { status: 404 }
+      );
+    }
+
+    // ✅ hanya bisa reject kalau belum selesai
+    if (report.status === 'SELESAI') {
+      return NextResponse.json(
+        { error: 'Laporan sudah selesai, tidak bisa ditolak.' },
+        { status: 400 }
+      );
+    }
+
+    if (report.status === 'DITOLAK') {
+      return NextResponse.json(
+        { error: 'Laporan sudah ditolak.' },
         { status: 400 }
       );
     }
@@ -43,26 +53,27 @@ export async function POST(
     const updated = await prisma.laporanFasilitas.update({
       where: { id: reportId },
       data: {
-        status: 'SELESAI',
-        resolvedAt: new Date(),
+        status: 'DITOLAK',
         events: {
           create: {
-            actorId: teknisi.id,
-            type: 'RESOLVED',
-            note: 'Teknisi menyelesaikan laporan.',
+            actorId: admin.id,
+            type: 'STATUS_CHANGED', // ✅ pakai enum yang sudah ada
+            note: note?.trim()
+              ? `Admin menolak laporan: ${note}`
+              : 'Admin menolak laporan.',
           },
         },
       },
       select: {
         id: true,
         status: true,
-        resolvedAt: true,
       },
     });
 
     return NextResponse.json({ ok: true, report: updated }, { status: 200 });
+
   } catch (err: any) {
-    console.error('Resolve report error:', err);
+    console.error('Reject report error:', err);
 
     if (err?.message === 'UNAUTHENTICATED') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
