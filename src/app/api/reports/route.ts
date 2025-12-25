@@ -23,6 +23,11 @@ export async function GET(req: NextRequest) {
       ? await requireAdmin(req)
       : await requireAuth(req);
 
+    // TEKNISI tidak boleh akses endpoint ini sesuai RBAC
+    if (user.role === 'TEKNISI') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     // pilih DB client berdasarkan mode
     const client =
       mode === 'strong'
