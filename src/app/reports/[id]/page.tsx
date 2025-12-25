@@ -51,6 +51,8 @@ export default function ReportDetailPage() {
 
   const [events, setEvents] = useState<any[]>([]);
   const [me, setMe] = useState<MeUser | null>(null);
+  const [meLoading, setMeLoading] = useState(true);
+
   const [report, setReport] = useState<ReportDetail | null>(null);
 
   const [judul, setJudul] = useState('');
@@ -62,9 +64,11 @@ export default function ReportDetailPage() {
   const [deskripsi, setDeskripsi] = useState('');
   const [fotoUrl, setFotoUrl] = useState('');
 
-  const isUser = me?.role === 'USER';
-  const isTeknisi = me?.role === 'TEKNISI';
-  const isAdmin = me?.role === 'ADMIN';
+  const role = me?.role || null;
+
+  const isUser = !meLoading && role === 'USER';
+  const isTeknisi = !meLoading && role === 'TEKNISI';
+  const isAdmin = !meLoading && role === 'ADMIN';
 
   const canEdit = isUser && report?.status === 'BARU';
   const canDelete = isUser && report?.status === 'BARU';
@@ -72,13 +76,16 @@ export default function ReportDetailPage() {
   // load user login
   useEffect(() => {
     async function loadMe() {
+      setMeLoading(true);
       try {
         const res = await fetch('/api/auth/me', { credentials: 'include' });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         setMe(data.user || null);
       } catch (e) {
         console.error(e);
         setMe(null);
+      } finally {
+        setMeLoading(false);
       }
     }
     loadMe();
@@ -276,6 +283,8 @@ export default function ReportDetailPage() {
     }
   }
 
+  const disableFields = meLoading || !canEdit;
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-50 px-3 py-6">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top,#6366f1_0,#020617_55%,#000_100%)] opacity-70" />
@@ -309,7 +318,6 @@ export default function ReportDetailPage() {
               <p className="text-xs text-slate-300">Memuat detail laporan...</p>
             ) : (
               <>
-                {/* input fields */}
                 <div>
                   <label className="block text-xs font-medium text-slate-200">
                     Judul laporan
@@ -318,7 +326,7 @@ export default function ReportDetailPage() {
                     type="text"
                     value={judul}
                     onChange={(e) => setJudul(e.target.value)}
-                    disabled={!canEdit}
+                    disabled={disableFields}
                     className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-50 disabled:bg-slate-900/40"
                   />
                 </div>
@@ -331,7 +339,7 @@ export default function ReportDetailPage() {
                     <select
                       value={kategori}
                       onChange={(e) => setKategori(e.target.value)}
-                      disabled={!canEdit}
+                      disabled={disableFields}
                       className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-50 disabled:bg-slate-900/40"
                     >
                       <option value="AIR">Air</option>
@@ -350,9 +358,9 @@ export default function ReportDetailPage() {
                     <select
                       value={prioritas}
                       onChange={(e) =>
-                        setPrioritas(e.target.value as any)
+                        setPrioritas(e.target.value as 'RENDAH' | 'SEDANG' | 'TINGGI')
                       }
-                      disabled={!canEdit}
+                      disabled={disableFields}
                       className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-50 disabled:bg-slate-900/40"
                     >
                       <option value="RENDAH">Rendah</option>
@@ -370,7 +378,7 @@ export default function ReportDetailPage() {
                     type="text"
                     value={lokasi}
                     onChange={(e) => setLokasi(e.target.value)}
-                    disabled={!canEdit}
+                    disabled={disableFields}
                     className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-50 disabled:bg-slate-900/40"
                   />
                 </div>
@@ -383,7 +391,7 @@ export default function ReportDetailPage() {
                     rows={4}
                     value={deskripsi}
                     onChange={(e) => setDeskripsi(e.target.value)}
-                    disabled={!canEdit}
+                    disabled={disableFields}
                     className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-50 disabled:bg-slate-900/40"
                   />
                 </div>
@@ -396,12 +404,11 @@ export default function ReportDetailPage() {
                     type="url"
                     value={fotoUrl}
                     onChange={(e) => setFotoUrl(e.target.value)}
-                    disabled={!canEdit}
+                    disabled={disableFields}
                     className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-50 disabled:bg-slate-900/40"
                   />
                 </div>
 
-                {/* messages */}
                 {error && (
                   <p className="rounded-xl border border-red-500/50 bg-red-950/40 px-3 py-2 text-xs text-red-200">
                     {error}
@@ -413,10 +420,8 @@ export default function ReportDetailPage() {
                   </p>
                 )}
 
-                {/* ROLE BASED ACTION BUTTONS */}
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-                  {/* USER */}
-                  {isUser && (
+                  {!meLoading && isUser && (
                     <>
                       <button
                         type="submit"
@@ -439,8 +444,7 @@ export default function ReportDetailPage() {
                     </>
                   )}
 
-                  {/* TEKNISI */}
-                  {isTeknisi && report?.status === 'DIPROSES' && (
+                  {!meLoading && isTeknisi && report?.status === 'DIPROSES' && (
                     <button
                       type="button"
                       onClick={handleStart}
@@ -451,7 +455,7 @@ export default function ReportDetailPage() {
                     </button>
                   )}
 
-                  {isTeknisi && report?.status === 'DIKERJAKAN' && (
+                  {!meLoading && isTeknisi && report?.status === 'DIKERJAKAN' && (
                     <button
                       type="button"
                       onClick={handleResolve}
@@ -462,8 +466,7 @@ export default function ReportDetailPage() {
                     </button>
                   )}
 
-                  {/* ADMIN */}
-                  {isAdmin && (
+                  {!meLoading && isAdmin && (
                     <p className="text-xs text-slate-400">
                       Admin hanya dapat melihat detail laporan.
                     </p>

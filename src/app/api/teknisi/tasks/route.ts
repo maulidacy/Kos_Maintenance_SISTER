@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   try {
     const teknisi = await requireTeknisi(req);
 
-    const tab = req.nextUrl.searchParams.get('tab'); 
+    const tab = req.nextUrl.searchParams.get('tab');
     const status = req.nextUrl.searchParams.get('status');
     const prioritas = req.nextUrl.searchParams.get('prioritas');
     const kategori = req.nextUrl.searchParams.get('kategori');
@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
     if (prioritas) where.prioritas = prioritas;
     if (kategori) where.kategori = kategori;
 
+    // ambil tasks sesuai filter (tidak diubah)
     const tasks = await prisma.laporanFasilitas.findMany({
       where,
       orderBy: { createdAt: 'desc' },
@@ -44,7 +45,39 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({ tasks }, { status: 200 });
+    // summary global (tidak terpengaruh filter query)
+    const [activeCount, doneCount, rejectedCount] = await Promise.all([
+      prisma.laporanFasilitas.count({
+        where: {
+          assignedToId: teknisi.id,
+          status: { in: ['DIPROSES', 'DIKERJAKAN'] },
+        },
+      }),
+      prisma.laporanFasilitas.count({
+        where: {
+          assignedToId: teknisi.id,
+          status: 'SELESAI',
+        },
+      }),
+      prisma.laporanFasilitas.count({
+        where: {
+          assignedToId: teknisi.id,
+          status: 'DITOLAK',
+        },
+      }),
+    ]);
+
+    return NextResponse.json(
+      {
+        tasks,
+        summary: {
+          aktif: activeCount,
+          selesai: doneCount,
+          ditolak: rejectedCount,
+        },
+      },
+      { status: 200 }
+    );
   } catch (err: any) {
     console.error('GET /teknisi/tasks error:', err);
 
