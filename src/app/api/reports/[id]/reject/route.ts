@@ -1,4 +1,3 @@
-// src/app/api/reports/[id]/reject/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/roleGuard';
@@ -23,55 +22,69 @@ export async function POST(
     const body = await req.json().catch(() => null);
     const note = body?.note as string | undefined;
 
-    const report = await prisma.laporanFasilitas.findUnique({
-      where: { id: reportId },
-      select: { id: true, status: true },
+    const now = new Date();
+
+    const updated = await prisma.$transaction(async (tx) => {
+      // Reject hanya jika bukan SELESAI dan bukan DITOLAK
+      const result = await tx.laporanFasilitas.updateMany({
+        where: {
+          id: reportId,
+          status: { notIn: ['SELESAI', 'DITOLAK'] },
+        },
+        data: { status: 'DITOLAK' },
+      });
+
+      if (result.count === 0) {
+        const existing = await tx.laporanFasilitas.findUnique({
+          where: { id: reportId },
+          select: { id: true, status: true },
+        });
+
+        if (!existing) return { error: 'NOT_FOUND' as const };
+        if (existing.status === 'SELESAI') return { error: 'DONE' as const };
+        return { error: 'ALREADY_REJECTED' as const };
+      }
+
+      await tx.laporanEvent.create({
+        data: {
+          laporanId: reportId,
+          actorId: admin.id,
+          type: 'STATUS_CHANGED',
+          note: note?.trim()
+            ? `Admin menolak laporan: ${note.trim()}`
+            : 'Admin menolak laporan.',
+          at: now,
+        },
+      });
+
+      const report = await tx.laporanFasilitas.findUnique({
+        where: { id: reportId },
+        select: { id: true, status: true },
+      });
+
+      return { report };
     });
 
-    if (!report) {
-      return NextResponse.json(
-        { error: 'Laporan tidak ditemukan.' },
-        { status: 404 }
-      );
-    }
-
-    // ✅ hanya bisa reject kalau belum selesai
-    if (report.status === 'SELESAI') {
-      return NextResponse.json(
-        { error: 'Laporan sudah selesai, tidak bisa ditolak.' },
-        { status: 400 }
-      );
-    }
-
-    if (report.status === 'DITOLAK') {
+    if ('error' in updated) {
+      if (updated.error === 'NOT_FOUND') {
+        return NextResponse.json(
+          { error: 'Laporan tidak ditemukan.' },
+          { status: 404 }
+        );
+      }
+      if (updated.error === 'DONE') {
+        return NextResponse.json(
+          { error: 'Laporan sudah selesai, tidak bisa ditolak.' },
+          { status: 400 }
+        );
+      }
       return NextResponse.json(
         { error: 'Laporan sudah ditolak.' },
         { status: 400 }
       );
     }
 
-    const updated = await prisma.laporanFasilitas.update({
-      where: { id: reportId },
-      data: {
-        status: 'DITOLAK',
-        events: {
-          create: {
-            actorId: admin.id,
-            type: 'STATUS_CHANGED', // ✅ pakai enum yang sudah ada
-            note: note?.trim()
-              ? `Admin menolak laporan: ${note}`
-              : 'Admin menolak laporan.',
-          },
-        },
-      },
-      select: {
-        id: true,
-        status: true,
-      },
-    });
-
-    return NextResponse.json({ ok: true, report: updated }, { status: 200 });
-
+    return NextResponse.json({ ok: true, report: updated.report }, { status: 200 });
   } catch (err: any) {
     console.error('Reject report error:', err);
 

@@ -1,4 +1,3 @@
-// src/app/api/reports/[id]/resolve/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireTeknisi } from '@/lib/roleGuard';
@@ -17,50 +16,64 @@ export async function POST(
       return NextResponse.json({ error: 'Report ID tidak ditemukan.' }, { status: 400 });
     }
 
-    const report = await prisma.laporanFasilitas.findUnique({
-      where: { id: reportId },
-      select: { id: true, status: true, assignedToId: true },
+    const now = new Date();
+
+    const updated = await prisma.$transaction(async (tx) => {
+      // Strong consistency: resolve hanya jika status DIKERJAKAN dan teknisi assigned
+      const result = await tx.laporanFasilitas.updateMany({
+        where: { id: reportId, status: 'DIKERJAKAN', assignedToId: teknisi.id },
+        data: {
+          status: 'SELESAI',
+          resolvedAt: now,
+        },
+      });
+
+      if (result.count === 0) {
+        const existing = await tx.laporanFasilitas.findUnique({
+          where: { id: reportId },
+          select: { id: true, status: true, assignedToId: true },
+        });
+
+        if (!existing) return { error: 'NOT_FOUND' as const };
+        if (existing.assignedToId !== teknisi.id) return { error: 'FORBIDDEN' as const };
+        return { error: 'INVALID_STATUS' as const };
+      }
+
+      await tx.laporanEvent.create({
+        data: {
+          laporanId: reportId,
+          actorId: teknisi.id,
+          type: 'RESOLVED',
+          note: 'Teknisi menyelesaikan laporan.',
+          at: now,
+        },
+      });
+
+      const report = await tx.laporanFasilitas.findUnique({
+        where: { id: reportId },
+        select: { id: true, status: true, resolvedAt: true },
+      });
+
+      return { report };
     });
 
-    if (!report) {
-      return NextResponse.json({ error: 'Laporan tidak ditemukan.' }, { status: 404 });
-    }
-
-    if (report.assignedToId !== teknisi.id) {
-      return NextResponse.json(
-        { error: 'Laporan ini bukan tugas kamu.' },
-        { status: 403 }
-      );
-    }
-
-    if (report.status !== 'DIKERJAKAN') {
+    if ('error' in updated) {
+      if (updated.error === 'NOT_FOUND') {
+        return NextResponse.json({ error: 'Laporan tidak ditemukan.' }, { status: 404 });
+      }
+      if (updated.error === 'FORBIDDEN') {
+        return NextResponse.json(
+          { error: 'Laporan ini bukan tugas kamu.' },
+          { status: 403 }
+        );
+      }
       return NextResponse.json(
         { error: 'Resolve hanya bisa dilakukan saat status DIKERJAKAN.' },
         { status: 400 }
       );
     }
 
-    const updated = await prisma.laporanFasilitas.update({
-      where: { id: reportId },
-      data: {
-        status: 'SELESAI',
-        resolvedAt: new Date(),
-        events: {
-          create: {
-            actorId: teknisi.id,
-            type: 'RESOLVED',
-            note: 'Teknisi menyelesaikan laporan.',
-          },
-        },
-      },
-      select: {
-        id: true,
-        status: true,
-        resolvedAt: true,
-      },
-    });
-
-    return NextResponse.json({ ok: true, report: updated }, { status: 200 });
+    return NextResponse.json({ ok: true, report: updated.report }, { status: 200 });
   } catch (err: any) {
     console.error('Resolve report error:', err);
 

@@ -1,4 +1,3 @@
-// src/app/api/reports/[id]/assign/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/roleGuard';
@@ -16,10 +15,11 @@ export async function POST(
     const body = await req.json().catch(() => null);
     const teknisiId = body?.teknisiId as string | undefined;
 
-    console.log("ASSIGN HIT", reportId, teknisiId);
-
     if (!reportId) {
-      return NextResponse.json({ error: 'Report ID tidak ditemukan.' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Report ID tidak ditemukan.' },
+        { status: 400 }
+      );
     }
 
     if (!teknisiId) {
@@ -36,45 +36,54 @@ export async function POST(
       return NextResponse.json({ error: 'Teknisi tidak valid.' }, { status: 400 });
     }
 
-    // cek report valid
-    const report = await prisma.laporanFasilitas.findUnique({
-      where: { id: reportId },
-      select: { id: true, status: true },
+    const now = new Date();
+
+    const updated = await prisma.$transaction(async (tx) => {
+      // Strong consistency: hanya update jika status masih DIPROSES
+      const result = await tx.laporanFasilitas.updateMany({
+        where: { id: reportId, status: 'DIPROSES' },
+        data: { assignedToId: teknisiId },
+      });
+
+      if (result.count === 0) {
+        const existing = await tx.laporanFasilitas.findUnique({
+          where: { id: reportId },
+          select: { id: true, status: true },
+        });
+
+        if (!existing) return { error: 'NOT_FOUND' as const };
+        return { error: 'INVALID_STATUS' as const };
+      }
+
+      await tx.laporanEvent.create({
+        data: {
+          laporanId: reportId,
+          actorId: admin.id,
+          type: 'ASSIGNED',
+          note: `Admin assign teknisi (${teknisiId}).`,
+          at: now,
+        },
+      });
+
+      const report = await tx.laporanFasilitas.findUnique({
+        where: { id: reportId },
+        select: { id: true, status: true, assignedToId: true },
+      });
+
+      return { report };
     });
 
-    if (!report) {
-      return NextResponse.json({ error: 'Laporan tidak ditemukan.' }, { status: 404 });
-    }
-
-    if (report.status !== 'DIPROSES') {
+    if ('error' in updated) {
+      if (updated.error === 'NOT_FOUND') {
+        return NextResponse.json({ error: 'Laporan tidak ditemukan.' }, { status: 404 });
+      }
       return NextResponse.json(
         { error: 'Assign hanya bisa saat status DIPROSES.' },
         { status: 400 }
       );
     }
 
-    // update assignedToId + log event
-    const updated = await prisma.laporanFasilitas.update({
-      where: { id: reportId },
-      data: {
-        assignedToId: teknisiId,
-        events: {
-          create: {
-            actorId: admin.id,
-            type: 'ASSIGNED',
-            note: `Admin assign teknisi (${teknisiId}).`,
-          },
-        },
-      },
-      select: {
-        id: true,
-        status: true,
-        assignedToId: true,
-      },
-    });
-
-    return NextResponse.json({ ok: true, report: updated }, { status: 200 });
-
+    return NextResponse.json({ ok: true, report: updated.report }, { status: 200 });
   } catch (err: any) {
     console.error('Assign report error:', err);
 

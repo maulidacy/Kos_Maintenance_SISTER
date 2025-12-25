@@ -9,7 +9,7 @@ import {
 
 export const runtime = 'nodejs';
 
-// ✅ GET detail report
+// GET detail report
 export async function GET(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }

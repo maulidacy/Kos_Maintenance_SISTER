@@ -1,4 +1,3 @@
-// src/app/admin/reports/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -16,17 +15,28 @@ type ReportRow = {
   assignedToId?: string | null;
 };
 
-
 type Technician = {
   id: string;
   namaLengkap: string;
   email: string;
 };
 
+type Pagination = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+};
+
 export default function AdminReportsPage() {
   const router = useRouter();
 
   const [reports, setReports] = useState<ReportRow[]>([]);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<Pagination | null>(null);
+
   const [teknisi, setTeknisi] = useState<Technician[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -35,11 +45,12 @@ export default function AdminReportsPage() {
   const [checkingRole, setCheckingRole] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // cek role terlebih dulu
+  const LIMIT = 10;
+
   useEffect(() => {
     async function checkRole() {
       try {
-        const res = await fetch('/api/auth/me');
+        const res = await fetch('/api/auth/me', { credentials: 'include' });
         const data = await res.json();
 
         if (!data.user) {
@@ -69,26 +80,41 @@ export default function AdminReportsPage() {
     setError(null);
 
     try {
-      const res = await fetch('/api/reports?admin=1&mode=strong');
+      const res = await fetch(
+        `/api/reports?admin=1&mode=strong&page=${page}&limit=${LIMIT}`,
+        { credentials: 'include' }
+      );
       const data = await res.json();
-      setReports(data.reports || []);
 
-      const resTek = await fetch('/api/admin/teknisi');
+      if (!res.ok) {
+        setError(data.error || 'Gagal memuat laporan.');
+        setReports([]);
+        setPagination(null);
+        return;
+      }
+
+      setReports(data.reports || []);
+      setPagination(data.pagination || null);
+
+      const resTek = await fetch('/api/admin/teknisi', {
+        credentials: 'include',
+      });
       const dataTek = await resTek.json();
       setTeknisi(dataTek.teknisi || []);
     } catch (e) {
       console.error(e);
       setError('Gagal memuat data laporan / teknisi.');
+      setReports([]);
+      setPagination(null);
     } finally {
       setLoading(false);
     }
   }
 
-  // load hanya kalau user admin
   useEffect(() => {
     if (!isAdmin) return;
     load();
-  }, [isAdmin]);
+  }, [isAdmin, page]);
 
   async function handleReceive(id: string) {
     setBusyId(id);
@@ -97,7 +123,7 @@ export default function AdminReportsPage() {
     try {
       const res = await fetch(`/api/reports/${id}/receive`, {
         method: 'POST',
-        credentials: 'include', // ✅
+        credentials: 'include',
       });
       const data = await res.json();
 
@@ -124,7 +150,7 @@ export default function AdminReportsPage() {
     try {
       const res = await fetch(`/api/reports/${reportId}/assign`, {
         method: 'POST',
-        credentials: 'include', //
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ teknisiId }),
       });
@@ -145,7 +171,6 @@ export default function AdminReportsPage() {
     }
   }
 
-  // reject
   async function handleReject(id: string) {
     const reason = prompt('Alasan penolakan (opsional):') || '';
 
@@ -176,7 +201,6 @@ export default function AdminReportsPage() {
     }
   }
 
-  // loading screen saat cek role
   if (checkingRole) {
     return (
       <main className="min-h-screen bg-slate-950 text-slate-50 px-3 py-6">
@@ -289,7 +313,7 @@ export default function AdminReportsPage() {
                               <select
                                 disabled={busyId === r.id}
                                 className="w-full rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2 text-[11px] text-slate-200 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/30"
-                                value={r.teknisiId ?? ''}
+                                value={r.assignedToId ?? ''}
                                 onChange={(e) => {
                                   const teknisiId = e.target.value;
                                   if (!teknisiId) return;
@@ -326,6 +350,32 @@ export default function AdminReportsPage() {
                 </tbody>
               </table>
             </div>
+
+            {pagination && pagination.totalPages > 1 && (
+              <div className="flex items-center justify-between gap-2 border-t border-white/10 bg-slate-900/40 px-4 py-3 text-xs text-slate-200">
+                <p className="text-slate-300">
+                  Halaman {pagination.page} dari {pagination.totalPages} • Total {pagination.total}
+                </p>
+
+                <div className="flex gap-2">
+                  <button
+                    disabled={!pagination.hasPrev}
+                    onClick={() => setPage((p) => Math.max(p - 1, 1))}
+                    className="rounded-xl border border-white/10 bg-slate-900/70 px-3 py-1.5 text-xs font-semibold text-slate-100 hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    Prev
+                  </button>
+
+                  <button
+                    disabled={!pagination.hasNext}
+                    onClick={() => setPage((p) => p + 1)}
+                    className="rounded-xl border border-white/10 bg-slate-900/70 px-3 py-1.5 text-xs font-semibold text-slate-100 hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -1,4 +1,3 @@
-// src/app/api/reports/[id]/start/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireTeknisi } from '@/lib/roleGuard';
@@ -14,53 +13,70 @@ export async function POST(
     const { id: reportId } = await context.params;
 
     if (!reportId) {
-      return NextResponse.json({ error: 'Report ID tidak ditemukan.' }, { status: 400 });
-    }
-
-    const report = await prisma.laporanFasilitas.findUnique({
-      where: { id: reportId },
-      select: { id: true, status: true, assignedToId: true },
-    });
-
-    if (!report) {
-      return NextResponse.json({ error: 'Laporan tidak ditemukan.' }, { status: 404 });
-    }
-
-    if (report.assignedToId !== teknisi.id) {
       return NextResponse.json(
-        { error: 'Laporan ini bukan tugas kamu.' },
-        { status: 403 }
-      );
-    }
-
-    if (report.status !== 'DIPROSES') {
-      return NextResponse.json(
-        { error: 'Start hanya bisa dilakukan saat status DIPROSES.' },
+        { error: 'Report ID tidak ditemukan.' },
         { status: 400 }
       );
     }
 
-    const updated = await prisma.laporanFasilitas.update({
-      where: { id: reportId },
-      data: {
-        status: 'DIKERJAKAN',
-        startedAt: new Date(),
-        events: {
-          create: {
-            actorId: teknisi.id,
-            type: 'STARTED',
-            note: 'Teknisi mulai mengerjakan laporan.',
-          },
+    const now = new Date();
+
+    const updated = await prisma.$transaction(async (tx) => {
+      // Strong consistency: update hanya jika status masih DIPROSES dan teknisi assigned
+      const result = await tx.laporanFasilitas.updateMany({
+        where: { id: reportId, status: 'DIPROSES', assignedToId: teknisi.id },
+        data: {
+          status: 'DIKERJAKAN',
+          startedAt: now,
         },
-      },
-      select: {
-        id: true,
-        status: true,
-        startedAt: true,
-      },
+      });
+
+      if (result.count === 0) {
+        const existing = await tx.laporanFasilitas.findUnique({
+          where: { id: reportId },
+          select: { id: true, status: true, assignedToId: true },
+        });
+
+        if (!existing) return { error: 'NOT_FOUND' as const };
+        if (existing.assignedToId !== teknisi.id) return { error: 'FORBIDDEN' as const };
+        return { error: 'INVALID_STATUS' as const };
+      }
+
+      await tx.laporanEvent.create({
+        data: {
+          laporanId: reportId,
+          actorId: teknisi.id,
+          type: 'STARTED',
+          note: 'Teknisi memulai pengerjaan.',
+          at: now,
+        },
+      });
+
+      const report = await tx.laporanFasilitas.findUnique({
+        where: { id: reportId },
+        select: { id: true, status: true, startedAt: true },
+      });
+
+      return { report };
     });
 
-    return NextResponse.json({ ok: true, report: updated }, { status: 200 });
+    if ('error' in updated) {
+      if (updated.error === 'NOT_FOUND') {
+        return NextResponse.json({ error: 'Laporan tidak ditemukan.' }, { status: 404 });
+      }
+      if (updated.error === 'FORBIDDEN') {
+        return NextResponse.json(
+          { error: 'Laporan ini bukan tugas kamu.' },
+          { status: 403 }
+        );
+      }
+      return NextResponse.json(
+        { error: 'Start hanya bisa saat status DIPROSES.' },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json({ ok: true, report: updated.report }, { status: 200 });
   } catch (err: any) {
     console.error('Start report error:', err);
 

@@ -1,4 +1,3 @@
-// src/app/api/reports/[id]/receive/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/roleGuard';
@@ -11,8 +10,6 @@ export async function POST(
 ) {
   try {
     const admin = await requireAdmin(req);
-
-    // Next 15: params harus di-await
     const { id: reportId } = await context.params;
 
     if (!reportId) {
@@ -22,46 +19,66 @@ export async function POST(
       );
     }
 
-    const report = await prisma.laporanFasilitas.findUnique({
-      where: { id: reportId },
-      select: { id: true, status: true },
+    const now = new Date();
+
+    const updated = await prisma.$transaction(async (tx) => {
+      // Strong consistency: hanya update jika status masih BARU
+      const result = await tx.laporanFasilitas.updateMany({
+        where: { id: reportId, status: 'BARU' },
+        data: {
+          status: 'DIPROSES',
+          receivedAt: now,
+        },
+      });
+
+      if (result.count === 0) {
+        const existing = await tx.laporanFasilitas.findUnique({
+          where: { id: reportId },
+          select: { id: true, status: true },
+        });
+
+        if (!existing) {
+          return { error: 'NOT_FOUND' as const };
+        }
+
+        return { error: 'INVALID_STATUS' as const };
+      }
+
+      await tx.laporanEvent.create({
+        data: {
+          laporanId: reportId,
+          actorId: admin.id,
+          type: 'RECEIVED',
+          note: 'Admin menerima laporan.',
+          at: now,
+        },
+      });
+
+      const report = await tx.laporanFasilitas.findUnique({
+        where: { id: reportId },
+        select: { id: true, status: true, receivedAt: true },
+      });
+
+      return { report };
     });
 
-    if (!report) {
-      return NextResponse.json(
-        { error: 'Laporan tidak ditemukan.' },
-        { status: 404 }
-      );
-    }
-
-    if (report.status !== 'BARU') {
+    if ('error' in updated) {
+      if (updated.error === 'NOT_FOUND') {
+        return NextResponse.json(
+          { error: 'Laporan tidak ditemukan.' },
+          { status: 404 }
+        );
+      }
       return NextResponse.json(
         { error: 'Laporan sudah diproses, tidak bisa di-receive lagi.' },
         { status: 400 }
       );
     }
 
-    const updated = await prisma.laporanFasilitas.update({
-      where: { id: reportId },
-      data: {
-        status: 'DIPROSES',
-        receivedAt: new Date(),
-        events: {
-          create: {
-            actorId: admin.id,
-            type: 'RECEIVED',
-            note: 'Admin menerima laporan.',
-          },
-        },
-      },
-      select: {
-        id: true,
-        status: true,
-        receivedAt: true,
-      },
-    });
-
-    return NextResponse.json({ ok: true, report: updated }, { status: 200 });
+    return NextResponse.json(
+      { ok: true, report: updated.report },
+      { status: 200 }
+    );
   } catch (err: any) {
     console.error('Receive report error:', err);
 

@@ -16,17 +16,32 @@ type ReportRow = {
   createdAt: string;
 };
 
+type PaginationMeta = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+};
+
 export default function ReportsPage() {
   const router = useRouter();
   const [reports, setReports] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationMeta | null>(null);
 
   useEffect(() => {
     async function load() {
+      setLoading(true);
       try {
-        const res = await fetch('/api/reports?mode=strong');
+        const res = await fetch(`/api/reports?mode=strong&page=${page}&limit=20`, {
+          credentials: 'include',
+        });
         const data = await res.json();
         setReports(data.reports || []);
+        setPagination(data.pagination || null);
       } catch (err) {
         console.error('Fetch reports error:', err);
       } finally {
@@ -34,7 +49,7 @@ export default function ReportsPage() {
       }
     }
     load();
-  }, []);
+  }, [page]);
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-50 px-3 py-6">
@@ -60,10 +75,38 @@ export default function ReportsPage() {
             Memuat laporan...
           </div>
         ) : (
-          <ReportTable
-            reports={reports}
-            onRowClick={(id) => router.push(`/reports/${id}`)}
-          />
+          <>
+            <ReportTable
+              reports={reports}
+              onRowClick={(id) => router.push(`/reports/${id}`)}
+            />
+
+            {pagination && pagination.totalPages > 1 && (
+              <div className="flex items-center justify-between gap-2 rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-xs text-slate-200">
+                <p className="text-slate-300">
+                  Halaman {pagination.page} dari {pagination.totalPages} • Total {pagination.total} laporan
+                </p>
+
+                <div className="flex gap-2">
+                  <button
+                    disabled={!pagination.hasPrev}
+                    onClick={() => setPage((p) => Math.max(p - 1, 1))}
+                    className="rounded-xl border border-white/10 bg-slate-900/70 px-3 py-1.5 text-xs font-semibold text-slate-100 hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    Prev
+                  </button>
+
+                  <button
+                    disabled={!pagination.hasNext}
+                    onClick={() => setPage((p) => p + 1)}
+                    className="rounded-xl border border-white/10 bg-slate-900/70 px-3 py-1.5 text-xs font-semibold text-slate-100 hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </main>
