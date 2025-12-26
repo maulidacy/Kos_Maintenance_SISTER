@@ -6,13 +6,12 @@ const globalForPrisma = globalThis as unknown as {
   prismaReplica: PrismaClient | undefined;
 };
 
+// PRIMARY: jangan override datasource manual
 export const prisma =
   globalForPrisma.prisma ??
-  new PrismaClient({
-    datasources: { db: { url: process.env.DATABASE_URL! } },
-  });
+  new PrismaClient();
 
-// Replica optional supaya tidak crash kalau env belum diset
+// REPLICA: optional, hanya dibuat kalau env ada
 const replicaUrl = process.env.REPLICA_DATABASE_URL;
 
 export const prismaReplica =
