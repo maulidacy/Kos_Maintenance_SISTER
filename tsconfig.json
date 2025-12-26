@@ -38,6 +38,7 @@
     ".next/dev/types/**/*.ts"
 , "scripts/replicate.cjs"  ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "prisma.config.backup.ts"
   ]
 }
