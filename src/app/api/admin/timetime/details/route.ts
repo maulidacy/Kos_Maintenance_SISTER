@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   try {
     await requireAdmin(req);
 
-    // ✅ params tanggal
+    // params tanggal
     const fromParam = req.nextUrl.searchParams.get('from');
     const toParam = req.nextUrl.searchParams.get('to');
 
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
       ? new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate() + 1))
       : defaultTo;
 
-    // ✅ pagination
+    // pagination
     const pageParam = req.nextUrl.searchParams.get('page');
     const limitParam = req.nextUrl.searchParams.get('limit');
 
@@ -52,10 +52,10 @@ export async function GET(req: NextRequest) {
       createdAt: { gte: timeFrom, lt: timeTo },
     };
 
-    // ✅ total untuk pagination
+    // total untuk pagination
     const total = await prisma.laporanFasilitas.count({ where });
 
-    // ✅ ambil data detail
+    // ambil data detail
     const reports = await prisma.laporanFasilitas.findMany({
       where,
       orderBy: { createdAt: 'desc' },
@@ -89,13 +89,15 @@ export async function GET(req: NextRequest) {
       },
       { status: 200 }
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('GET /api/admin/timetime/details error:', err);
 
-    if (err?.message === 'UNAUTHENTICATED') {
+    const message = err instanceof Error ? err.message : '';
+
+    if (message === 'UNAUTHENTICATED') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    if (err?.message === 'FORBIDDEN') {
+    if (message === 'FORBIDDEN') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
